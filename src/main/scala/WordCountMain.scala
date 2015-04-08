@@ -15,15 +15,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object WordCountMain extends App {
   val system = ActorSystem("akka-wordcount")
-  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wordcount-supervisor")
+  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
   // wcSupAct ! ("chunky", args(0))
   wcSupAct ! ("direct", args(0))
 }
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
-  //  val wcMapAct = context.actorOf(BalancingPool(nMappers).props(Props[WordCountMapper]),
-  val wcMapAct = context.actorOf(BalancingPool(nMappers).props(Props[WordCountItrMapper]), "wordcount-mapper-router")
-  val wcRedAct = context.actorOf(ConsistentHashingPool(nReducers).props(Props[WordCountReducer]), "wordcount-reducer-router")
+  val wcMapAct = context.actorOf(BalancingPool(nMappers).props(Props[WordCountMapper]), "wc-mapper")
+  val wcRedAct = context.actorOf(ConsistentHashingPool(nReducers).props(Props[WordCountReducer]), "wc-reducer")
 
   context.watch(wcMapAct)
   context.watch(wcRedAct)
@@ -60,8 +59,11 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   }
 }
 
-class WordCountItrMapper extends Mapper[KeyVal[String, Int]]("../../wordcount-reducer-router")({
-  ss: String => ss.split(raw"\s+").map(_.trim.toLowerCase.filterNot(_ == ',')).filterNot(StopWords.contains).map(KeyVal(_, 1))
+class WordCountMapper extends Mapper[KeyVal[String, Int]]("../../wc-reducer")({
+  ss: String => ss.split(raw"\s+")
+    .map(_.trim.toLowerCase.filterNot(_ == ','))
+    .filterNot(StopWords.contains)
+    .map(KeyVal(_, 1))
 })
 
 class WordCountReducer extends Reducer[String, Int](_ + _)
