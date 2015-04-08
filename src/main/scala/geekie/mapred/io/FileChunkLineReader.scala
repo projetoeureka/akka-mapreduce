@@ -7,11 +7,12 @@ package geekie.mapred.io
 import scala.io.Source
 
 object FileChunkLineReader {
-  def apply(filename: String, start: Int, end: Int) =
-    Source.fromIterable(FileChunkCharReader(filename, start, end)).getLines()
+  def apply(filename: String)(range: (Int, Int)) =
+    Source.fromIterable(FileChunkCharReader(filename)(range)).getLines()
 }
 
-class FileChunkCharReader(filename: String, start: Int, end: Int) extends Iterable[Char] {
+class FileChunkCharReader(filename: String)(range: (Int, Int)) extends Iterable[Char] {
+  val (start, end) = range
   def fullItr = Source.fromFile(filename).zipWithIndex
 
   val dumbItr = (if (start > 0) fullItr.drop(start).dropWhile(_._1 != '\n').drop(1) else fullItr).buffered
@@ -25,11 +26,12 @@ class FileChunkCharReader(filename: String, start: Int, end: Int) extends Iterab
 }
 
 object FileChunkCharReader {
-  def apply(filename: String, start: Int, end: Int) = new FileChunkCharReader(filename, start, end)
+  def apply(filename: String)(range: (Int, Int)) = new FileChunkCharReader(filename)(range)
 }
 
 object ChunkLimits {
-  def apply(end: Int, skip: Int) = ((0 until end by skip) zip (skip until end by skip)) :+((end - 1) / skip * skip, end)
+  def apply(end: Int, skip: Int) =
+      ((0 until end by skip) zip (skip until end by skip)) :+ ((end - 1) / skip * skip, end)
 }
 
 case class FileChunk(filename: String, begin: Int, end: Int)

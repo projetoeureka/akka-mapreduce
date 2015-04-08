@@ -13,7 +13,6 @@ class Mapper[B](reducerPath: String)(f: String => Seq[B]) extends Actor {
 
   def receive = {
     case s: String => f(s) foreach (reducer ! _)
-    case strItr: Iterator[String] =>
-      strItr.flatMap(f).foreach(reducer ! _)
+    case strItr: Iterator[String] => strItr flatMap f  foreach (reducer ! _)
   }
 }
