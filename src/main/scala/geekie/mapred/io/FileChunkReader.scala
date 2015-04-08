@@ -1,8 +1,8 @@
-package geekie.mapred.io
-
 /**
  * Created by nlw on 06/04/15. Line-oriented file chunk reading utilities.
+ *
  */
+package geekie.mapred.io
 
 import scala.io.Source
 

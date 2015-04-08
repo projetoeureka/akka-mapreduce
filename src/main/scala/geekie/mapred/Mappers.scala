@@ -1,11 +1,12 @@
+/**
+ * Created by nlw on 08/04/15. Mappers!
+ *
+ */
 package geekie.mapred
 
 import akka.actor.Actor
 import geekie.mapred.io.{FileChunk, FileChunkLineReader}
 
-/**
- * Created by nlw on 08/04/15.
- */
 
 case object MapperFinish
 
@@ -15,23 +16,20 @@ class StringMultiMapper[B](reducerPath: String)(f: String => Seq[B]) extends Act
 
   def receive = {
     case s: String => f(s) foreach (reducer ! _)
-    case MapperFinish => {
+    case MapperFinish =>
       sender ! MapperFinish
       context.stop(self)
-    }
   }
 }
 
-class FileChunkStringMultiMapper[B](reducerPath: String)(f: String => Seq[B]) extends Actor {
+class StringIteratorMultiMapper[B](reducerPath: String)(f: String => Seq[B]) extends Actor {
   val reducer = context.actorSelection(reducerPath)
 
   def receive = {
-    case FileChunk(filename, start, end) => {
-      FileChunkLineReader(filename, start, end).flatMap(f).foreach(reducer ! _)
-    }
-    case MapperFinish => {
+    case strItr: Iterator[String] =>
+      strItr.flatMap(f).foreach(reducer ! _)
+    case MapperFinish =>
       sender ! MapperFinish
       context.stop(self)
-    }
   }
 }
