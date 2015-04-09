@@ -67,6 +67,8 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
     case Terminated(`wcRedAct`) =>
       println("FINAL RESULTS")
       finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
+
+    case DataAck(l) => println(l)
   }
 }
 

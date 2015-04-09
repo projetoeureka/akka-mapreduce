@@ -13,11 +13,22 @@ class Mapper[A: ClassTag, B](reducerPath: String, f: A => Seq[B]) extends Actor 
   val reducer = context.actorSelection(reducerPath)
 
   def receive = {
-    case s: A => f(s) foreach (reducer ! _)
-    case strItr: Iterator[A] => strItr flatMap f foreach (reducer ! _)
+    case s: A =>
+      sender ! DataAck(s.asInstanceOf[String].length)
+      f(s) foreach (reducer ! _)
+
+    case strItr: Iterator[A] =>
+      strItr flatMap {
+        s: A =>
+          sender ! DataAck(s.asInstanceOf[String].length)
+          f(s)
+      } foreach (reducer ! _)
+
   }
 }
 
 object Mapper {
   def apply[A: ClassTag, B](reducerPath: String)(f: A => Seq[B]) = new Mapper(reducerPath, f)
 }
+
+case class DataAck(length: Int)
