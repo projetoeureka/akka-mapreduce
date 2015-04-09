@@ -16,8 +16,10 @@ import scala.concurrent.ExecutionContext.Implicits.global
 object WordCountMain extends App {
   val system = ActorSystem("akka-wordcount")
   val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
-  // wcSupAct ! ("chunky", args(0))
-  wcSupAct !("direct", args(0))
+  if (args.length < 1) println("MISSING INPUT FILENAME") else {
+    // wcSupAct ! ("chunky", args(0))
+    wcSupAct !("direct", args(0))
+  }
 }
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
@@ -68,7 +70,7 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
       println("FINAL RESULTS")
       finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
 
-    case DataAck(l) => println(l)
+    // case DataAck(l) => println(l)
   }
 }
 
