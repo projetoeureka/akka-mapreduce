@@ -56,10 +56,6 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
       wcRedAct ! Broadcast(GetAggregator)
       wcRedAct ! Broadcast(PoisonPill)
 
-    case Terminated(`wcRedAct`) =>
-      println("FINAL RESULTS")
-      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
-
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[String, Int]]
       finalAggregate = finalAggregate ++ ag
@@ -67,6 +63,10 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
       println(sender())
       ag.toList.sortBy(-_._2).take(5) foreach print
       println()
+
+    case Terminated(`wcRedAct`) =>
+      println("FINAL RESULTS")
+      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
   }
 }
 

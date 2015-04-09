@@ -12,3 +12,5 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-actor" % akkaV
   )
 }
+
+publishTo := Some(Resolver.file("file",  new File(Path.userHome.absolutePath+"/.m2/repository")))
