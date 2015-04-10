@@ -1,6 +1,6 @@
 package geekie.mapred
 
-import akka.actor.{PoisonPill, Actor}
+import akka.actor.{ActorRef, PoisonPill, Actor}
 import akka.routing.Broadcast
 
 /**
@@ -9,23 +9,23 @@ import akka.routing.Broadcast
  *
  */
 
-case object Obituary
+case object EndOfData
 
-class Funnel(reducerPath: String, totalTransmitters: Int) extends Actor {
-  val reducer = context.actorSelection(reducerPath)
+class Funnel(dest: ActorRef, totalTransmitters: Int) extends Actor {
   private var nTransmitters = totalTransmitters
 
   def receive = {
-    case Obituary =>
+    case EndOfData =>
       nTransmitters -= 1
       if (nTransmitters == 0) {
-        reducer ! Obituary
-        nTransmitters = totalTransmitters
+        dest ! EndOfData
       }
-    case x: Any => reducer.tell(x, sender())
+    case x: Any => dest.tell(x, sender())
   }
 }
 
 object Funnel {
   def apply(destPath: String, totalTransmitters: Int) = new Funnel(destPath, totalTransmitters)
 }
+
+

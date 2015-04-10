@@ -5,26 +5,25 @@
  */
 package geekie.mapred
 
-import akka.actor.Actor
+import akka.actor.{ActorRef, Actor}
 
 import scala.reflect.ClassTag
 
-class Mapper[A: ClassTag, B](superPath: String, f: A => Seq[B]) extends Actor {
-  val supervisor = context.actorSelection(superPath)
+class Mapper[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
 
   def receive = {
     case s: A =>
       sender ! DataAck(s.asInstanceOf[String].length)
-      f(s) foreach (supervisor ! _)
+      f(s) foreach (output ! _)
 
     case strItr: Iterator[A] =>
       strItr flatMap {
         s: A =>
           sender ! DataAck(s.asInstanceOf[String].length)
           f(s)
-      } foreach (supervisor ! _)
+      } foreach (output ! _)
 
-    case Obituary => supervisor ! Obituary
+    case EndOfData => output ! EndOfData
 
   }
 }

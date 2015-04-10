@@ -24,6 +24,7 @@ class FileChunkLineReader(filename: String, start: Int, end: Int) extends Iterab
   }
 }
 
+
 class SmartFileIterator(filename: String) {
   val fp = new RandomAccessFile(filename, "r")
   val itr = new BufferedReader(new InputStreamReader(new FileInputStream(fp.getFD)))

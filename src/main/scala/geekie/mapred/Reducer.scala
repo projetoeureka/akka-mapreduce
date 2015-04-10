@@ -5,7 +5,7 @@
  */
 package geekie.mapred
 
-import akka.actor.Actor
+import akka.actor.{ActorRef, Actor}
 import akka.routing.ConsistentHashingRouter.ConsistentHashable
 
 import scala.reflect.ClassTag
@@ -18,16 +18,18 @@ case class KeyVal[K, V](key: K, value: V) extends ConsistentHashable {
   override def consistentHashKey: Any = key
 }
 
-class Reducer[K: ClassTag, V: ClassTag](f: (V, V) => V) extends Actor {
+class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, f: (V, V) => V) extends Actor {
   var aggregator: Map[K, V] = Map()
 
   def receive = {
     case KeyVal(key: K, value: V) =>
       aggregator += (key -> (if (aggregator contains key) f(aggregator(key), value) else value))
-    case GetAggregator => sender ! ReducerResult(aggregator)
+    case GetAggregator =>
+      output ! ReducerResult(aggregator)
+      output ! EndOfData
   }
 }
 
 object Reducer {
-  def apply[K: ClassTag, V: ClassTag](f: (V, V) => V) = new Reducer[K, V](f)
+  def apply[K: ClassTag, V: ClassTag](output: ActorRef)(f: (V, V) => V) = new Reducer[K, V](output, f)
 }
