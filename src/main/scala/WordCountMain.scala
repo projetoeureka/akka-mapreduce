@@ -15,7 +15,7 @@ import scala.io.Source
 
 object WordCountMain extends App {
   val system = ActorSystem("akka-wordcount")
-  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(100, 4)), "wc-super")
+  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
     wcSupAct !("chunky", args(0))
@@ -25,16 +25,18 @@ object WordCountMain extends App {
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
-/*  def myMapper = Mapper("../../wc-reducer") {
+  def myMapper = Mapper("../../wc-reducer") {
     ss: String => ss.split(raw"\s+").toSeq
       .map(_.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
-  }*/
+  }
 
+/*
     def myMapper = Mapper("../../wc-reducer") {
       ss: String => Seq(KeyVal("TOTAL", 1))
     }
+*/
 
   def myReducer = Reducer[String, Int](_ + _)
 
@@ -50,7 +52,7 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   def receive = {
     case ("chunky", filename: String) =>
       val fileSize = new File(filename).length.toInt
-      ChunkLimits(fileSize, fileSize / nMappers) foreach {
+      ChunkLimits(fileSize, (fileSize + nMappers) / nMappers) foreach {
         wcMapAct ! FileChunkLineReader(filename)(_).iterator
       }
       wcMapAct ! Broadcast(PoisonPill)

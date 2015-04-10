@@ -8,25 +8,41 @@ import java.io._
 import java.nio.charset.StandardCharsets
 
 class FileChunkLineReader(filename: String, start: Int, end: Int) extends Iterable[String] {
-  val fp = new RandomAccessFile("/home/nlw/machado.txt", "r")
-  if (start > 0) fp.seek(start - 1)
-  val itr = new BufferedReader(
-    new InputStreamReader(
-      new FileInputStream(fp.getFD)))
-
-  if (start > 0) itr.readLine()
-
-  var pos: Long = start
-  println(f"file chunk $start $end $pos")
+  println(f"file chunk $start $end")
 
   def iterator = new Iterator[String] {
-    def hasNext = pos < end
+    val lineItr = new SmartFileIterator(filename)
 
-    def next() = {
-      val xx = itr.readLine()
-      pos += xx.getBytes.length + 1
-      xx
+    if (start > 0) {
+      lineItr.seek(start)
+      lineItr.readLine()
     }
+
+    def hasNext = lineItr.position < end && lineItr.hasNext
+
+    def next() = lineItr.readLine()
+  }
+}
+
+class SmartFileIterator(filename: String) {
+  val fp = new RandomAccessFile(filename, "r")
+  val itr = new BufferedReader(new InputStreamReader(new FileInputStream(fp.getFD)))
+  val fileSize = fp.length
+  private var _position: Long = 0
+
+  def position = _position
+
+  def hasNext = position < fileSize
+
+  def seek(newPosition: Long) = {
+    fp.seek(newPosition)
+    _position = newPosition
+  }
+
+  def readLine() = {
+    val nextLine = itr.readLine()
+    _position += nextLine.getBytes.length + 1
+    nextLine
   }
 }
 
