@@ -3,33 +3,38 @@
  *
  */
 
+import java.io.File
+
 import akka.actor._
 import akka.routing._
-import geekie.mapred.io.{ChunkLimits, FileChunkLineReader}
-import scala.io.Source
-
 import geekie.mapred._
+import geekie.mapred.io.{ChunkLimits, FileChunkLineReader}
 
-import scala.concurrent.ExecutionContext.Implicits.global
+import scala.io.Source
 
 
 object WordCountMain extends App {
   val system = ActorSystem("akka-wordcount")
-  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
-  if (args.length < 1) println("MISSING INPUT FILENAME") else {
-    // wcSupAct ! ("chunky", args(0))
-    wcSupAct !("direct", args(0))
+  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(100, 4)), "wc-super")
+  if (args.length < 1) println("MISSING INPUT FILENAME")
+  else {
+    wcSupAct !("chunky", args(0))
+    //    wcSupAct !("direct", args(0))
   }
 }
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
-  def myMapper = Mapper("../../wc-reducer") {
+/*  def myMapper = Mapper("../../wc-reducer") {
     ss: String => ss.split(raw"\s+").toSeq
       .map(_.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
-  }
+  }*/
+
+    def myMapper = Mapper("../../wc-reducer") {
+      ss: String => Seq(KeyVal("TOTAL", 1))
+    }
 
   def myReducer = Reducer[String, Int](_ + _)
 
@@ -40,12 +45,13 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   context.watch(wcRedAct)
 
   var finalAggregate: Map[String, Int] = Map()
+  var progress = 0L
 
   def receive = {
     case ("chunky", filename: String) =>
-      val fileSize = Source.fromFile(filename).length
+      val fileSize = new File(filename).length.toInt
       ChunkLimits(fileSize, fileSize / nMappers) foreach {
-        wcMapAct ! FileChunkLineReader(filename)(_)
+        wcMapAct ! FileChunkLineReader(filename)(_).iterator
       }
       wcMapAct ! Broadcast(PoisonPill)
 
@@ -69,8 +75,9 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
     case Terminated(`wcRedAct`) =>
       println("FINAL RESULTS")
       finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
+      println(progress)
 
-    // case DataAck(l) => println(l)
+    case DataAck(l) => progress += l
   }
 }
 
