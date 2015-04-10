@@ -25,26 +25,26 @@ object WordCountMain extends App {
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
-  def myMapper = Mapper("../../wc-reducer") {
+  def myMapper = Mapper("/user/wc-funnel") {
     ss: String => ss.split(raw"\s+").toSeq
       .map(_.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
   }
 
-/*
-    def myMapper = Mapper("../../wc-reducer") {
-      ss: String => Seq(KeyVal("TOTAL", 1))
-    }
-*/
+  def myFunnelM = Funnel("/user/wc-reducer", nMappers)
+
+  def myFunnelR = Funnel("/user/super", nReducers)
 
   def myReducer = Reducer[String, Int](_ + _)
 
-  val wcMapAct = context.actorOf(BalancingPool(nMappers).props(Props(myMapper)), "wc-mapper")
-  val wcRedAct = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "wc-reducer")
+  val mapper = context.actorOf(BalancingPool(nMappers).props(Props(myMapper)), "wc-mapper")
+  val funnelM = context.actorOf(Props(myFunnelM), "wc-funnel")
+  val funnelR = context.actorOf(Props(myFunnelR), "wc-funnel")
+  val reducer = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "wc-reducer")
 
-  context.watch(wcMapAct)
-  context.watch(wcRedAct)
+  context.watch(mapper)
+  context.watch(reducer)
 
   var finalAggregate: Map[String, Int] = Map()
   var progress = 0L
@@ -52,29 +52,32 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   def receive = {
     case ("chunky", filename: String) =>
       val fileSize = new File(filename).length.toInt
-      ChunkLimits(fileSize, (fileSize + nMappers) / nMappers) foreach {
-        wcMapAct ! FileChunkLineReader(filename)(_).iterator
+      val chunkSize = (fileSize + nMappers) / nMappers
+      ChunkLimits(fileSize, chunkSize) foreach {
+        mapper ! FileChunkLineReader(filename)(_).iterator
       }
-      wcMapAct ! Broadcast(PoisonPill)
+
+      mapper ! Broadcast(Obituary)
+      mapper ! Broadcast(PoisonPill)
 
     case ("direct", filename: String) =>
       val lineItr = Source.fromFile(filename).getLines()
-      lineItr foreach (wcMapAct ! _)
-      wcMapAct ! Broadcast(PoisonPill)
+      lineItr foreach (mapper ! _)
+      mapper ! Broadcast(PoisonPill)
 
-    case Terminated(`wcMapAct`) =>
-      wcRedAct ! Broadcast(GetAggregator)
-      wcRedAct ! Broadcast(PoisonPill)
+    case Terminated(`mapper`) =>
+      println("Mapeprs died...")
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[String, Int]]
       finalAggregate = finalAggregate ++ ag
+
       // Debug messages to demonstrate the disjoint key sets from the reducer actors.
       println(sender())
       ag.toList.sortBy(-_._2).take(5) foreach print
       println()
 
-    case Terminated(`wcRedAct`) =>
+    case Terminated(`reducer`) =>
       println("FINAL RESULTS")
       finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
       println(progress)
