@@ -1,7 +1,6 @@
 package geekie.mapred
 
-import akka.actor.{ActorSelection, ActorRef, PoisonPill, Actor}
-import akka.routing.Broadcast
+import akka.actor.{Actor, ActorRef}
 
 /**
  * Created by nlw on 10/04/15.

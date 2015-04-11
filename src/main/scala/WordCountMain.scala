@@ -20,12 +20,59 @@ object WordCountMain extends App {
   val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
-    // wcSupAct !("chunky", args(0))
-    wcSupAct !("direct", args(0))
+    wcSupAct !("chunky", args(0))
+    // wcSupAct !("direct", args(0))
   }
   system.scheduler.schedule(0.seconds, 1.second, wcSupAct, Progress)
 }
 
+case object Progress
+
+class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
+
+  val reducerCast = context.actorOf(Props(new ReducerCast(self, nReducers)), "reducer-cast")
+  val mapperCast = context.actorOf(Props(new MapperCast(reducerCast, nMappers)), "mapper-cast")
+
+  var finalAggregate: Map[String, Int] = Map()
+
+  var progress = 0
+  var fileSize = 0
+
+  def setFileSize(filename: String) = {
+    fileSize = new File(filename).length.toInt
+  }
+
+  def receive = {
+    case ("chunky", filename: String) =>
+      setFileSize(filename)
+      ChunkLimits(fileSize, nMappers) foreach {
+        mapperCast ! FileChunkLineReader(filename)(_).iterator
+      }
+      mapperCast ! Broadcast(EndOfData)
+      mapperCast ! Broadcast(PoisonPill)
+
+    case ("direct", filename: String) =>
+      setFileSize(filename)
+      val lineItr = Source.fromFile(filename).getLines()
+      lineItr foreach (mapperCast ! _)
+      mapperCast ! Broadcast(EndOfData)
+      mapperCast ! Broadcast(PoisonPill)
+
+    case ReducerResult(agAny) =>
+      val ag = agAny.asInstanceOf[Map[String, Int]]
+      finalAggregate = finalAggregate ++ ag
+
+    case EndOfData =>
+      println("FINAL RESULTS")
+      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
+      println(progress)
+      context.system.shutdown()
+
+    case DataAck(l) => progress += l
+
+    case Progress => println(f"${(100.0 * progress) / fileSize}%6.1f%% - $progress / $fileSize")
+  }
+}
 
 class MapperCast(output: ActorRef, nMappers: Int) extends Actor {
   //val output = context.actorSelection(outputPath)
@@ -62,56 +109,6 @@ class ReducerCast(output: ActorRef, nReducers: Int) extends Actor {
       router ! Broadcast(GetAggregator)
       router ! Broadcast(EndOfData)
     case x: Any => router ! x
-  }
-}
-
-case object Progress
-
-class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
-
-  val reducerCast = context.actorOf(Props(new ReducerCast(self, nReducers)), "reducer-cast")
-  val mapperCast = context.actorOf(Props(new MapperCast(reducerCast, nMappers)), "mapper-cast")
-
-  var finalAggregate: Map[String, Int] = Map()
-
-  var progress = 0
-  var fileSize = 0
-
-  def receive = {
-    case ("chunky", filename: String) =>
-      fileSize = new File(filename).length.toInt
-      val chunkSize = (fileSize + nMappers) / nMappers
-      ChunkLimits(fileSize, chunkSize) foreach {
-        mapperCast ! FileChunkLineReader(filename)(_).iterator
-      }
-      mapperCast ! Broadcast(EndOfData)
-    //mapperCast ! Broadcast(PoisonPill)
-
-    case ("direct", filename: String) =>
-      fileSize = new File(filename).length.toInt
-      val lineItr = Source.fromFile(filename).getLines()
-      lineItr foreach (mapperCast ! _)
-      mapperCast ! Broadcast(EndOfData)
-    //mapper ! Broadcast(PoisonPill)
-
-
-    case ReducerResult(agAny) =>
-      val ag = agAny.asInstanceOf[Map[String, Int]]
-      finalAggregate = finalAggregate ++ ag
-
-      // Debug messages to demonstrate the disjoint key sets from the reducer actors.
-      println(sender())
-      ag.toList.sortBy(-_._2).take(5) foreach print
-      println()
-
-    case EndOfData =>
-      println("FINAL RESULTS")
-      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
-      println(progress)
-
-    case DataAck(l) => progress += l
-
-    case Progress => println(f"${(100.0 * progress) / fileSize}%6.1f%% - $progress / $fileSize")
   }
 }
 
