@@ -13,13 +13,13 @@ class Mapper[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
 
   def receive = {
     case s: A =>
-      sender ! DataAck(s.asInstanceOf[String].length)
+      sender ! DataAck(s.asInstanceOf[String].getBytes.length + 1)
       f(s) foreach (output ! _)
 
     case strItr: Iterator[A] =>
       strItr flatMap {
         s: A =>
-          sender ! DataAck(s.asInstanceOf[String].length)
+          sender ! DataAck(s.asInstanceOf[String].getBytes.length + 1)
           f(s)
       } foreach (output ! _)
 
@@ -29,7 +29,7 @@ class Mapper[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
 }
 
 object Mapper {
-  def apply[A: ClassTag, B](superPath: String)(f: A => Seq[B]) = new Mapper(superPath, f)
+  def apply[A: ClassTag, B](output: ActorRef)(f: A => Seq[B]) = new Mapper(output, f)
 }
 
 case class DataAck(length: Int)
