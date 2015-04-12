@@ -6,7 +6,7 @@ package geekie.mapred.io
  *
  */
 
-class FileChunkLineReader(filename: String, start: Int, end: Int) extends Iterable[String] {
+class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iterable[String] {
   def iterator = new Iterator[String] {
     private val lineItr = new FileCounterIterator(filename)
 
@@ -19,20 +19,17 @@ class FileChunkLineReader(filename: String, start: Int, end: Int) extends Iterab
 }
 
 object FileChunkLineReader {
-  def apply(filename: String, start: Int, end: Int) = new FileChunkLineReader(filename, start, end)
-  def apply(filename: String)(range: (Int, Int)) = new FileChunkLineReader(filename, range._1, range._2)
+  def apply(filename: String, start: Long, end: Long) = new FileChunkLineReader(filename, start, end)
+  def apply(filename: String)(range: (Long, Long)) = new FileChunkLineReader(filename, range._1, range._2)
 }
 
 object ChunkLimits {
-  def apply(end: Int, nChunks: Int) = {
-    val skip = (end + 1) / nChunks
-    ((0 until end by skip) zip (skip until end by skip)) :+((end - 1) / skip * skip, end)
-  }
-}
+  def apply(end: Long, nChunks: Long) = chunkStream(0L, end.toLong, nChunks.toLong)
 
-object BresenhamChunkLimits { //Bresenham!
-  def apply(end: Int, nChunks: Int) = {
-    val skip = (end + 1) / nChunks
-    ((0 until end by skip) zip (skip until end by skip)) :+((end - 1) / skip * skip, end)
+  def chunkStream(start: Long, end: Long, nChunks: Long): Stream[(Long, Long)] = {
+    if (nChunks > 1) {
+      val cut = start + (end - start) / nChunks
+      (start, cut) #:: chunkStream(cut, end, nChunks-1)
+    } else Stream[(Long, Long)]((start, end))
   }
 }
