@@ -1,4 +1,4 @@
-# akka-wordcount
+# akka-mapreduce
 
 This is an Akka based library to perform parallel Map-Reduce tasks, with all sub-tasks happening inside Akka actors.
 Includes a wordcount example, and a library to help reading large line-oriented files in blocks of whole lines.
