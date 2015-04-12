@@ -4,7 +4,8 @@ import java.io.File
 
 /**
  * Created by nlw on 06/04/15.
- * Line-oriented file chunk reading utilities. Useful for map-reduce tasks on large files.
+ * Line-oriented file chunk reading utilities. Useful for map-reduce tasks on large files. Word of caution: because of
+ * how the line-finding mechanism works, chunks should have a size of at least 2 bytes, otherwise data is just ignored.
  *
  */
 
@@ -36,7 +37,7 @@ object ChunkLimits {
     if (nChunks > 1) {
       val cut = start + (end - start) / nChunks
       (start, cut) #:: chunkStream(cut, end, nChunks - 1)
-    } else Stream[(Long, Long)]((start, end))
+    } else (start, end) #:: Stream()
   }
 }
 
