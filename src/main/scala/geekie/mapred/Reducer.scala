@@ -24,9 +24,12 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, f: (V, V) => V) extend
   def receive = {
     case KeyVal(key: K, value: V) =>
       aggregator += (key -> (if (aggregator contains key) f(aggregator(key), value) else value))
+
     case GetAggregator =>
       output ! ReducerResult(aggregator)
-      output ! EndOfData
+
+    case Forward(x) =>
+      output ! x
   }
 }
 

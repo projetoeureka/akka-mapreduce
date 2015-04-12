@@ -17,7 +17,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 object WordCountMain extends App {
   val system = ActorSystem("akka-wordcount")
-  val wcSupAct = system.actorOf(Props(new WordCountSupervisor(4, 4)), "wc-super")
+  val wcSupAct = system.actorOf(Props(classOf[WordCountSupervisor], 4, 4), "wc-super")
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
     wcSupAct !("chunky", args(0))
@@ -30,8 +30,8 @@ case object Progress
 
 class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
-  val reducerCast = context.actorOf(Props(new ReducerCast(self, nReducers)), "reducer-cast")
-  val mapperCast = context.actorOf(Props(new MapperCast(reducerCast, nMappers)), "mapper-cast")
+  val reducerCast = context.actorOf(Props(classOf[ReducerCast], self, nReducers), "reducer-cast")
+  val mapperCast = context.actorOf(Props(classOf[MapperCast], reducerCast, nMappers), "mapper-cast")
 
   var finalAggregate: Map[String, Int] = Map()
 
@@ -48,15 +48,13 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
       ChunkLimits(fileSize, nMappers) foreach {
         mapperCast ! FileChunkLineReader(filename)(_).iterator
       }
-      mapperCast ! Broadcast(EndOfData)
-      mapperCast ! Broadcast(PoisonPill)
+      mapperCast ! EndOfData
 
     case ("direct", filename: String) =>
       setFileSize(filename)
       val lineItr = Source.fromFile(filename).getLines()
       lineItr foreach (mapperCast ! _)
-      mapperCast ! Broadcast(EndOfData)
-      mapperCast ! Broadcast(PoisonPill)
+      mapperCast ! EndOfData
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[String, Int]]
@@ -64,9 +62,10 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
     case EndOfData =>
       println("FINAL RESULTS")
-      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " ") }
-      println(progress)
-      context.system.shutdown()
+      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " -> " + i + " ") }
+      context.system.scheduler.scheduleOnce(1.second, self, "DIE")
+
+    case "DIE" => context.system.shutdown()
 
     case DataAck(l) => progress += l
 
@@ -74,41 +73,46 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   }
 }
 
+case object EndOfData
+
 class MapperCast(output: ActorRef, nMappers: Int) extends Actor {
-  //val output = context.actorSelection(outputPath)
 
-  val funnel = context.actorOf(Props(new Funnel(output, nMappers)), "yaya")
+  val mapperDec = context.actorOf(Props(classOf[Decimator], output, nMappers, EndOfData), "map-dec")
 
-  def myMapper = Mapper(funnel) {
+  def myMapper = Mapper(mapperDec) {
     ss: String => ss.split(raw"\s+").toSeq
       .map(_.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
-      .map(KeyVal(_, 1))
+      .map { ww => KeyVal(ww, 1) }
   }
 
-  val router = context.actorOf(BalancingPool(nMappers).props(Props(myMapper)), "yoyo")
+  val mapperRouter = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "map-rtr")
 
   def receive = {
-    case x: Any => router.tell(x, sender())
+    case EndOfData =>
+      mapperRouter ! Broadcast(Forward(EndOfData))
+
+    case x: Any =>
+      mapperRouter.tell(x, sender())
   }
 }
 
 
 class ReducerCast(output: ActorRef, nReducers: Int) extends Actor {
-  //val output = context.actorSelection(outputPath)
 
-  val funnel = context.actorOf(Props(Funnel(output, nReducers)), "yayaay")
+  val reducerDec = context.actorOf(Props(classOf[Decimator], output, nReducers, EndOfData), "red-dec")
 
-  def myReducer = Reducer[String, Int](funnel)(_ + _)
+  def myReducer = Reducer[String, Int](reducerDec)(_ + _)
 
-  val router = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "routA")
-
+  val reducerRouter = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "red-rtr")
 
   def receive = {
     case EndOfData =>
-      router ! Broadcast(GetAggregator)
-      router ! Broadcast(EndOfData)
-    case x: Any => router ! x
+      reducerRouter ! Broadcast(GetAggregator)
+      reducerRouter ! Broadcast(Forward(EndOfData))
+
+    case x: Any =>
+      reducerRouter.tell(x, sender())
   }
 }
 

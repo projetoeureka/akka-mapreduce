@@ -9,6 +9,8 @@ import akka.actor.{ActorRef, Actor}
 
 import scala.reflect.ClassTag
 
+case class Forward[T](obj: T)
+
 class Mapper[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
 
   def receive = {
@@ -23,8 +25,8 @@ class Mapper[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
           f(s)
       } foreach (output ! _)
 
-    case EndOfData => output ! EndOfData
-
+    case Forward(x) =>
+      output ! x
   }
 }
 
