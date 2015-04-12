@@ -1,14 +1,11 @@
-import java.io.File
-
 import akka.actor._
-import akka.routing.{ConsistentHashingPool, SmallestMailboxPool, Broadcast}
-import scala.io.Source
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
-
+import akka.routing.{Broadcast, ConsistentHashingPool, SmallestMailboxPool}
 import geekie.mapred._
-import geekie.mapred.io.{FileChunks, FileSize, FileChunkLineReader, ChunkLimits}
+import geekie.mapred.io.{FileChunks, FileSize}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.io.Source
 
 /**
  * Created by nlw on 12/04/15.
@@ -21,10 +18,9 @@ object SimplisticWordCountMain extends App {
   val wordcountSupervisor = system.actorOf(Props(classOf[SimplisticWordCountSupervisor], 8, 8), "supervisor")
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
-    wordcountSupervisor ! MultipleFileReaders(args(0))
-    // wcSupAct ! SingleFileReader(args(0))
+    //wordcountSupervisor ! MultipleFileReaders(args(0))
+    wordcountSupervisor ! SingleFileReader(args(0))
   }
-  system.scheduler.schedule(0.seconds, 1.second, wordcountSupervisor, Progress)
 }
 
 class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
@@ -44,18 +40,11 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
   context.watch(reducer)
 
   var progress = 0
-  var fileSize = 0
   var finalAggregate: Map[String, Int] = Map()
 
   def receive = {
-
-    case MultipleFileReaders(filename) =>
-      fileSize = FileSize(filename)
-      FileChunks(filename, 100*nMappers) foreach (mapper ! _.iterator)
-      mapper ! Broadcast(PoisonPill)
-
     case SingleFileReader(filename) =>
-      fileSize = FileSize(filename)
+      println(s"PROCESSING FILE $filename")
       Source.fromFile(filename).getLines() foreach (mapper ! _)
       mapper ! Broadcast(PoisonPill)
 
@@ -68,14 +57,9 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
       finalAggregate = finalAggregate ++ ag
 
     case Terminated(`reducer`) =>
-      println("FINAL RESULTS")
-      finalAggregate.toList sortBy (-_._2) take 100 foreach { case (s, i) => print(s + " -> " + i + " ") }
+      PrintResults(finalAggregate)
       context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
 
     case HammerdownProtocol => context.system.shutdown()
-
-    case DataAck(l) => progress += l
-
-    case Progress => println(f"${(100.0 * progress) / fileSize}%6.1f%% - $progress / $fileSize")
   }
 }
