@@ -1,4 +1,4 @@
-name := "akka-wordcount"
+name := "akka-mapreduce"
 
 version := "1.0"
 
