@@ -1,11 +1,11 @@
 import akka.actor._
-import akka.routing._
 import geekie.mapred._
-import geekie.mapred.io.{FileChunks, FileSize}
+import geekie.mapred.io.FileChunks
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.io.Source
+import scala.reflect.ClassTag
 
 /**
  * Created by nlw on 05/04/15.
@@ -17,19 +17,31 @@ object WordCountMain extends App {
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
     val system = ActorSystem("akka-wordcount")
-    val wordcountSupervisor = system.actorOf(Props(classOf[WordCountSupervisor], 8, 8), "wc-super")
+
+    // def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("oi",1))} (_ + _)
+
+    def mySup = MapReduceSupervisor[String,String,Int](4,4) { ss: String =>
+      ss.split(raw"\s+").toSeq
+        .map(_.trim.toLowerCase.filterNot(_ == ','))
+        .filterNot(StopWords.contains)
+        .map { ww => KeyVal(ww, 1) }
+    } (_ + _)
+
+    val wordcountSupervisor = system.actorOf(Props(mySup), "wc-super")
     wordcountSupervisor ! MultipleFileReaders(args(0))
     // wcSupAct ! SingleFileReader(args(0))
   }
 }
 
-class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
-
-  val reducer = context.actorOf(Props(classOf[Reducer], self, nReducers), "reducer")
-  val mapper = context.actorOf(Props(classOf[Mapper], reducer, nMappers), "mapper")
+class MapReduceSupervisor[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nMappers: Int, nReducers: Int)
+                                        (mapFun: A=>Seq[KeyVal[RedK, RedV]])
+                                        (redFun: (RedV,RedV)=>RedV) extends Actor
+{
+  val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
+  val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
 
   var progress = 0
-  var finalAggregate: Map[String, Int] = Map()
+  var finalAggregate: Map[RedK, RedV] = Map()
 
   def receive = {
     case MultipleFileReaders(filename) =>
@@ -38,7 +50,7 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
       mapper ! EndOfData
 
     case ReducerResult(agAny) =>
-      val ag = agAny.asInstanceOf[Map[String, Int]]
+      val ag = agAny.asInstanceOf[Map[RedK, RedV]]
       finalAggregate = finalAggregate ++ ag
 
     case EndOfData =>
@@ -49,39 +61,9 @@ class WordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
   }
 }
 
-class Mapper(output: ActorRef, nMappers: Int) extends Actor {
-  val mapperDecimator = context.actorOf(Props(classOf[Decimator], output, nMappers, EndOfData), "mapper-decimator")
-
-  def wordEmitter = { ss: String =>
-    ss.split(raw"\s+").toSeq
-      .map(_.trim.toLowerCase.filterNot(_ == ','))
-      .filterNot(StopWords.contains)
-      .map { ww => KeyVal(ww, 1) }
-  }
-
-  def myMapper = MapperTask(mapperDecimator)(wordEmitter)
-
-  val mapperRouter = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "mapper-router")
-
-  def receive = {
-    case EndOfData => mapperRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => mapperRouter ! x
-  }
-}
-
-class Reducer(output: ActorRef, nReducers: Int) extends Actor {
-  val reducerDecimator = context.actorOf(Props(classOf[Decimator], output, nReducers, EndOfData), "reducer-decimator")
-
-  def myReducer = ReducerTask[String, Int](reducerDecimator)(_ + _)
-
-  val reducerRouter = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "reducer-router")
-
-  def receive = {
-    case EndOfData =>
-      reducerRouter ! Broadcast(GetAggregator)
-      reducerRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => reducerRouter ! x
-  }
+object MapReduceSupervisor {
+  def apply[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nm: Int, nr:Int)(mapFun: A=>Seq[KeyVal[RedK, RedV]])
+                                                     (redFun: (RedV,RedV)=>RedV) = new MapReduceSupervisor(nm, nr)(mapFun)(redFun)
 }
 
 case class SingleFileReader(filename: String)
@@ -90,8 +72,6 @@ case class MultipleFileReaders(filename: String)
 
 case object HammerdownProtocol
 
-case object EndOfData
-
 object StopWords {
   private val stopwords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
@@ -99,9 +79,10 @@ object StopWords {
 }
 
 object PrintResults {
-  def apply(finalAggregate: Map[String, Int]) = {
+  def apply[RedK, RedV](finalAggregate: Map[RedK, RedV]) = {
     println("FINAL RESULTS")
-    finalAggregate.toList sortBy (-_._2) take 20 foreach {
+    val ag = finalAggregate.asInstanceOf[Map[String, Int]]
+    ag.toList sortBy (-_._2) take 20 foreach {
       case (s, i) => println(f"$s%8s:$i%5d")
     }
   }

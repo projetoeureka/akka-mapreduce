@@ -19,3 +19,4 @@ case object GetAggregator
 
 case class ReducerResult[K: ClassTag, V: ClassTag](aggregator: Map[K, V])
 
+case object EndOfData
