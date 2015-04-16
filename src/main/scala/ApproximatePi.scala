@@ -28,7 +28,7 @@ object ApproximatePi extends App {
 
 
 class PiMapReduceSupervisor[A: ClassTag, RedK: ClassTag, RedV: ClassTag](nMappers: Int, nReducers: Int)
-                                                                        (mapFun: A => Seq[KeyVal[RedK, RedV]])
+                                                                        (mapFun: A => Traversable[KeyVal[RedK, RedV]])
                                                                         (redFun: (RedV, RedV) => RedV) extends Actor {
   val reducer = Reducer[RedK, RedV](self, nReducers)(redFun)
   val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)

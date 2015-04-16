@@ -9,7 +9,7 @@ import scala.reflect.ClassTag
  * A mapper that takes an object (iterator) and forwards zero or more corresponding calculated objects to the reducer.
  *
  */
-class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor {
+class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Traversable[B]) extends Actor {
   def receive = {
     case datum: A => f(datum) foreach (output ! _)
     case dataItr: Iterator[A] => dataItr flatMap f foreach (output ! _)
@@ -18,5 +18,5 @@ class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor
 }
 
 object MapperTask {
-  def apply[A: ClassTag, B](output: ActorRef)(f: A => Seq[B]) = new MapperTask(output, f)
+  def apply[A: ClassTag, B](output: ActorRef)(f: A => Traversable[B]) = new MapperTask(output, f)
 }

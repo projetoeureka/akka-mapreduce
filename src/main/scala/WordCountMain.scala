@@ -34,7 +34,7 @@ object WordCountMain extends App {
 }
 
 class MapReduceSupervisor[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nMappers: Int, nReducers: Int)
-                                        (mapFun: A=>Seq[KeyVal[RedK, RedV]])
+                                        (mapFun: A=>Traversable[KeyVal[RedK, RedV]])
                                         (redFun: (RedV,RedV)=>RedV) extends Actor
 {
   val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
@@ -62,7 +62,7 @@ class MapReduceSupervisor[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nMappers: In
 }
 
 object MapReduceSupervisor {
-  def apply[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nm: Int, nr:Int)(mapFun: A=>Seq[KeyVal[RedK, RedV]])
+  def apply[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nm: Int, nr:Int)(mapFun: A=>Traversable[KeyVal[RedK, RedV]])
                                                      (redFun: (RedV,RedV)=>RedV) = new MapReduceSupervisor(nm, nr)(mapFun)(redFun)
 }
 
