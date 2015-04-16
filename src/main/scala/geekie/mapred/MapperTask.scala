@@ -13,7 +13,7 @@ class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Seq[B]) extends Actor
   def receive = {
     case datum: A => f(datum) foreach (output ! _)
     case dataItr: Iterator[A] => dataItr flatMap f foreach (output ! _)
-    case Forward(x) => output ! x
+    case Forward(x) => output forward x
   }
 }
 

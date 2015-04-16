@@ -20,7 +20,7 @@ class ReducerTask[K: ClassTag, V: ClassTag](output: ActorRef, f: (V, V) => V) ex
   def receive = {
     case KeyVal(key: K, value: V) => updateAggregator(key, value)
     case GetAggregator => output ! ReducerResult(aggregator)
-    case Forward(x) => output ! x
+    case Forward(x) => output forward x
   }
 }
 
