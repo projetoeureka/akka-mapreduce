@@ -13,9 +13,9 @@ class Decimator(dest: ActorRef, factor: Int, targetObject: Any) extends Actor {
   def receive = {
     case `targetObject` =>
       phase = if (phase == factor - 1) 0 else phase + 1
-      if (phase == 0) dest ! targetObject
+      if (phase == 0) dest.forward(targetObject)
 
-    case x: Any => dest ! x
+    case x: Any => dest.forward(x)
   }
 }
 

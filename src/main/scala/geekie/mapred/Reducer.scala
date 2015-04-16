@@ -9,13 +9,6 @@ import scala.reflect.ClassTag
  * Created by nlw on 15/04/15.
  * An akka-mapreduce reducer, with a router and decimator
  */
-object Reducer {
-  def apply[K: ClassTag, V: ClassTag](output: ActorRef, nWorkers: Int)
-                                     (f: (V, V) => V)
-                                     (implicit context: akka.actor.ActorContext) =
-    context.actorOf(Props(new Reducer[K, V](output, nWorkers, f)), "reducer")
-}
-
 class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V, V) => V) extends Actor {
   val reducerDecimator = context.actorOf(Props(classOf[Decimator], output, nReducers, EndOfData), "reducer-decimator")
 
@@ -27,8 +20,15 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V,
     case EndOfData =>
       reducerRouter ! Broadcast(GetAggregator)
       reducerRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => reducerRouter ! x
+    case x: Any => reducerRouter.forward(x)
   }
+}
+
+object Reducer {
+  def apply[K: ClassTag, V: ClassTag](output: ActorRef, nWorkers: Int)
+                                     (f: (V, V) => V)
+                                     (implicit context: akka.actor.ActorContext) =
+    context.actorOf(Props(new Reducer[K, V](output, nWorkers, f)), "reducer")
 }
 
 // TODO: generic worker names

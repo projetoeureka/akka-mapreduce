@@ -18,7 +18,7 @@ object WordCountMain extends App {
   else {
     val system = ActorSystem("akka-wordcount")
 
-    // def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("oi",1))} (_ + _)
+//    def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("LINECOUNT", 1))} (_ + _)
 
     def mySup = MapReduceSupervisor[String,String,Int](4,4) { ss: String =>
       ss.split(raw"\s+").toSeq

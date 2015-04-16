@@ -42,5 +42,5 @@ object ChunkLimits {
 }
 
 object FileSize {
-  def apply(filename: String) = new File(filename).length.toInt
+  def apply(filename: String) = new File(filename).length
 }
