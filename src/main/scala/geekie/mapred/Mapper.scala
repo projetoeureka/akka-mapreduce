@@ -18,7 +18,7 @@ class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => 
 
   def receive = {
     case EndOfData => mapperRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => mapperRouter.forward(x)
+    case x: Any => mapperRouter forward x
   }
 }
 

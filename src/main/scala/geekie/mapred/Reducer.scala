@@ -20,7 +20,7 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V,
     case EndOfData =>
       reducerRouter ! Broadcast(GetAggregator)
       reducerRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => reducerRouter.forward(x)
+    case x: Any => reducerRouter forward x
   }
 }
 
