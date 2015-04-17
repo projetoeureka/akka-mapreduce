@@ -18,14 +18,14 @@ object WordCountMain extends App {
   else {
     val system = ActorSystem("akka-wordcount")
 
-//    def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("LINECOUNT", 1))} (_ + _)
+    //    def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("LINECOUNT", 1))} (_ + _)
 
-    def mySup = MapReduceSupervisor[String,String,Int](4,4) { ss: String =>
+    def mySup = MapReduceSupervisor[String, String, Int](4, 4) { ss: String =>
       ss.split(raw"\s+").toSeq
         .map(_.trim.toLowerCase.filterNot(_ == ','))
         .filterNot(StopWords.contains)
         .map { ww => KeyVal(ww, 1) }
-    } (_ + _)
+    }(_ + _)
 
     val wordcountSupervisor = system.actorOf(Props(mySup), "wc-super")
     wordcountSupervisor ! MultipleFileReaders(args(0))
@@ -33,12 +33,23 @@ object WordCountMain extends App {
   }
 }
 
-class MapReduceSupervisor[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nMappers: Int, nReducers: Int)
-                                        (mapFun: A=>Traversable[KeyVal[RedK, RedV]])
-                                        (redFun: (RedV,RedV)=>RedV) extends Actor
-{
-  val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
-  val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
+class MapReduceSupervisor[A: ClassTag, RedK: ClassTag, RedV: ClassTag]
+(nMappers: Int, nReducers: Int)
+(mapFun: A => Traversable[KeyVal[RedK, RedV]])
+(redFun: (RedV, RedV) => RedV) extends Actor {
+  /*
+    val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
+    val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
+  */
+
+  val myworkers = aMap {
+    mapFun
+  } aReduce {
+    redFun
+  } aOutput(self, context)
+
+  val mapper = myworkers.head
+  val reducer = myworkers(1)
 
   var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
@@ -62,9 +73,45 @@ class MapReduceSupervisor[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nMappers: In
 }
 
 object MapReduceSupervisor {
-  def apply[A:ClassTag, RedK:ClassTag, RedV:ClassTag](nm: Int, nr:Int)(mapFun: A=>Traversable[KeyVal[RedK, RedV]])
-                                                     (redFun: (RedV,RedV)=>RedV) = new MapReduceSupervisor(nm, nr)(mapFun)(redFun)
+  def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag](nm: Int, nr: Int)(mapFun: A => Traversable[KeyVal[RedK, RedV]])
+                                                        (redFun: (RedV, RedV) => RedV) = new MapReduceSupervisor(nm, nr)(mapFun)(redFun)
 }
+
+
+case class Pipeline[A: ClassTag, RedK: ClassTag, RedV: ClassTag](functionSeq: List[MRFunction]) {
+
+  def aMap(myFunc: A => Traversable[KeyVal[RedK, RedV]]): Pipeline[A,RedK,RedV] = Pipeline(MapFunction(myFunc) :: functionSeq)
+
+  def aReduce(myFunc: (RedV, RedV) => RedV): Pipeline[A,RedK,RedV] = Pipeline(ReduceFunction(myFunc) :: functionSeq)
+
+  def aOutput(dest: ActorRef, context: akka.actor.ActorContext) = generatePipeline(dest, context)
+
+  def generatePipeline(dest: ActorRef, context: akka.actor.ActorContext) =
+    (List(dest) /: functionSeq) {
+      (out, ww) =>
+        ww match {
+          case MapFunction(f) =>
+            Mapper[A, KeyVal[RedK, RedV]](out.head, 8,context)(f.asInstanceOf[A => Traversable[KeyVal[RedK, RedV]]]) :: out
+          case ReduceFunction(f) =>
+            Reducer[RedK, RedV](out.head, 8,context)(f.asInstanceOf[(RedV, RedV) => RedV]) :: out
+        }
+    }
+}
+
+object aMap {
+  def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag](myFunc: A => Traversable[KeyVal[RedK, RedV]]): Pipeline[A, RedK, RedV] = Pipeline(List(MapFunction(myFunc)))
+}
+
+object aReduce {
+  def apply[A:ClassTag, RedK: ClassTag, RedV: ClassTag](myFunc: (RedV, RedV) => RedV): Pipeline[A, RedK, RedV] = Pipeline(List(ReduceFunction(myFunc)))
+}
+
+sealed trait MRFunction
+
+case class MapFunction[A, RedK, RedV](mapFun: A => Traversable[KeyVal[RedK, RedV]]) extends MRFunction
+
+case class ReduceFunction[RedK, RedV](redFun: (RedV, RedV) => RedV) extends MRFunction
+
 
 case class SingleFileReader(filename: String)
 
