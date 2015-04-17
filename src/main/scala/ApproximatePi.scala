@@ -13,25 +13,26 @@ object ApproximatePi extends App {
   println("APPROXIMATING PI")
   val system = ActorSystem("akka-wordcount")
 
-  def mySup = PiMapReduceSupervisor[Int, String, BigDecimal](10, 2) { x: Int =>
+  val wordcountSupervisor = system.actorOf(Props[PiMapReduceSupervisor], "wc-super")
+  wordcountSupervisor ! StartCalculations
+}
+
+
+class PiMapReduceSupervisor extends Actor {
+
+  type RedK = String
+  type RedV = BigDecimal
+
+  val myworkers = pmap { x: Int =>
     val x = random * 2 - 1
     val y = random * 2 - 1
     Seq(
       KeyVal("SUM", BigDecimal(if (x * x + y * y < 1) 1 else 0)),
       KeyVal("N", BigDecimal(1))
     )
-  }(_ + _)
+  } preduce (_ + _) poutput self
 
-  val wordcountSupervisor = system.actorOf(Props(mySup), "wc-super")
-  wordcountSupervisor ! StartCalculations
-}
-
-
-class PiMapReduceSupervisor[A: ClassTag, RedK: ClassTag, RedV: ClassTag](nMappers: Int, nReducers: Int)
-                                                                        (mapFun: A => Traversable[KeyVal[RedK, RedV]])
-                                                                        (redFun: (RedV, RedV) => RedV) extends Actor {
-  val reducer = Reducer[RedK, RedV](self, nReducers)(redFun)
-  val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
+  val mapper = myworkers.head
 
   var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
@@ -53,11 +54,6 @@ class PiMapReduceSupervisor[A: ClassTag, RedK: ClassTag, RedV: ClassTag](nMapper
 
     case HammerdownProtocol => context.system.shutdown()
   }
-}
-
-object PiMapReduceSupervisor {
-  def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag](nm: Int, nr: Int)(mapFun: A => Seq[KeyVal[RedK, RedV]])
-                                                        (redFun: (RedV, RedV) => RedV) = new PiMapReduceSupervisor(nm, nr)(mapFun)(redFun)
 }
 
 object PiPrintResults {

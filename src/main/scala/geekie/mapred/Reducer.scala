@@ -25,9 +25,8 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V,
 }
 
 object Reducer {
-  def apply[K: ClassTag, V: ClassTag](output: ActorRef, nWorkers: Int, context: akka.actor.ActorContext)
-                                     (f: (V, V) => V)
-                                      =
+  def apply[K: ClassTag, V: ClassTag](output: ActorRef, nWorkers: Int)(f: (V, V) => V)
+                                     (implicit context: akka.actor.ActorContext) =
     context.actorOf(Props(new Reducer[K, V](output, nWorkers, f)), "reducer")
 }
 
