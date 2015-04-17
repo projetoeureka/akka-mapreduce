@@ -38,12 +38,12 @@ class MapReduceSupervisor extends Actor {
 
   val nMappers = 4
 
-  val myworkers = pmap { ss: String =>
+  val myworkers = pipe_map { ss: String =>
     (ss split raw"\s+")
       .map(word => word.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
-  } preduce (_ + _) poutput self
+  } times 3 reduce (_ + _) times 8 output self
 
   val mapper = myworkers.head
 

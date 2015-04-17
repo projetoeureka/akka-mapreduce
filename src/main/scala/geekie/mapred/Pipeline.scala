@@ -8,43 +8,56 @@ import scala.reflect.ClassTag
  * Created by nlw on 17/04/15.
  * A pipeline builder
  */
-case class Pipeline[A: ClassTag, RedK: ClassTag, RedV: ClassTag](functionSeq: List[MRFunction])(implicit context: ActorContext) {
+case class Pipeline[A: ClassTag, RedK: ClassTag, RedV: ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
 
-  def pmap(myFunc: A => Traversable[KeyVal[RedK, RedV]]): Pipeline[A, RedK, RedV] = Pipeline(MapFunction(myFunc) :: functionSeq)
+  type MapperFunction = A => Traversable[KeyVal[RedK, RedV]]
+  type ReducerFunction = (RedV, RedV) => RedV
 
-  def preduce(myFunc: (RedV, RedV) => RedV): Pipeline[A, RedK, RedV] = Pipeline(ReduceFunction(myFunc) :: functionSeq)
+  def map(myFunc: MapperFunction): Pipeline[A, RedK, RedV] =
+    Pipeline(MapperFuncCommand(myFunc) :: functionSeq)
 
-  def poutput(dest: ActorRef) = generatePipeline(dest)
+  def reduce(myFunc: ReducerFunction): Pipeline[A, RedK, RedV] =
+    Pipeline(ReducerFuncCommand(myFunc) :: functionSeq)
 
-  def generatePipeline(dest: ActorRef) =
-    (List(dest) /: functionSeq) {
-      (out, ww) =>
-        ww match {
-          case MapFunction(f) =>
-            Mapper[A, KeyVal[RedK, RedV]](out.head, 8)(f.asInstanceOf[A => Traversable[KeyVal[RedK, RedV]]]) :: out
-          case ReduceFunction(f) =>
-            Reducer[RedK, RedV](out.head, 8)(f.asInstanceOf[(RedV, RedV) => RedV]) :: out
+  def times(nWorkers: Int): Pipeline[A, RedK, RedV] =
+    Pipeline(MultiplyWorkers(nWorkers) ::  functionSeq)
+
+  def output(dest: ActorRef) = generatePipeline(dest)
+
+  def generatePipeline(dest: ActorRef) = {
+    ((List(dest), 1) /: functionSeq) {
+      (state, buildCommand) => {
+        val (out: List[ActorRef], nw: Int) = state
+        buildCommand match {
+          case MultiplyWorkers(newNw) => (out, newNw)
+          case MapperFuncCommand(func) =>
+            (Mapper[A, KeyVal[RedK, RedV]](out.head, nw)(func.asInstanceOf[MapperFunction]) :: out, 1)
+          case ReducerFuncCommand(func) =>
+            (Reducer[RedK, RedV](out.head, nw)(func.asInstanceOf[ReducerFunction]) :: out, 1)
         }
-    }
+      }
+    }._1
+  }
 }
 
-object pmap {
+object pipe_map {
   def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag]
   (myFunc: A => Traversable[KeyVal[RedK, RedV]])
   (implicit context: ActorContext): Pipeline[A, RedK, RedV] =
-    Pipeline(List(MapFunction(myFunc)))
+    Pipeline(List(MapperFuncCommand(myFunc)))
 }
 
-object preduce {
+object pipe_reduce {
   def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag]
   (myFunc: (RedV, RedV) => RedV)
   (implicit context: ActorContext): Pipeline[A, RedK, RedV] =
-    Pipeline(List(ReduceFunction(myFunc)))
+    Pipeline(List(ReducerFuncCommand(myFunc)))
 }
 
-sealed trait MRFunction
+sealed trait MRBuildCommand
 
-case class MapFunction[A, RedK, RedV](mapFun: A => Traversable[KeyVal[RedK, RedV]]) extends MRFunction
+case class MapperFuncCommand[A, RedK, RedV](mapFun: A => Traversable[KeyVal[RedK, RedV]]) extends MRBuildCommand
 
-case class ReduceFunction[RedK, RedV](redFun: (RedV, RedV) => RedV) extends MRFunction
+case class ReducerFuncCommand[RedK, RedV](redFun: (RedV, RedV) => RedV) extends MRBuildCommand
 
+case class MultiplyWorkers(nw: Int) extends MRBuildCommand

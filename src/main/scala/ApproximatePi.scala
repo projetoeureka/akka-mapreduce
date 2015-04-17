@@ -23,14 +23,14 @@ class PiMapReduceSupervisor extends Actor {
   type RedK = String
   type RedV = BigDecimal
 
-  val myworkers = pmap { x: Int =>
+  val myworkers = pipe_map { x: Int =>
     val x = random * 2 - 1
     val y = random * 2 - 1
     Seq(
       KeyVal("SUM", BigDecimal(if (x * x + y * y < 1) 1 else 0)),
       KeyVal("N", BigDecimal(1))
     )
-  } preduce (_ + _) poutput self
+  } times 4 reduce (_ + _) times 4 output self
 
   val mapper = myworkers.head
 
