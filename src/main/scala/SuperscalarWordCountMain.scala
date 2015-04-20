@@ -4,33 +4,25 @@ import geekie.mapred.io.FileChunks
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.io.Source
-import scala.reflect.ClassTag
 
 /**
  * Created by nlw on 05/04/15.
  * Akka based map-reduce task example with neat job flow control.
  *
  */
-object WordCountMain extends App {
-  println("RUNNING NEAT M/R")
+object SuperscalarWordCountMain extends App {
+  println("RUNNING \"SUPERSCALAR\" M/R")
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
     val system = ActorSystem("akka-wordcount")
 
-    //    def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("LINECOUNT", 1))} (_ + _)
-
-    val wordcountSupervisor = system.actorOf(Props[MapReduceSupervisor], "wc-super")
+    val wordcountSupervisor = system.actorOf(Props[SsWcMapReduceSupervisor], "wc-super")
     wordcountSupervisor ! MultipleFileReaders(args(0))
     // wcSupAct ! SingleFileReader(args(0))
   }
 }
 
-class MapReduceSupervisor extends Actor {
-  /*
-    val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
-    val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
-  */
+class SsWcMapReduceSupervisor extends Actor {
 
   type A = String
   type RedK = String
@@ -38,12 +30,17 @@ class MapReduceSupervisor extends Actor {
 
   val nMappers = 4
 
-  val myworkers = pipe_mapkv {ss: String =>
-    (ss split raw"\s+")
-      .map(word => word.trim.toLowerCase.filterNot(_ == ','))
-      .filterNot(StopWords.contains)
-      .map(KeyVal(_, 1))
-  } times nMappers reduce (_ + _) times 1 output self
+  val myworkers = pipe_map {
+    ss: String => ss split raw"\s+"
+  } times 4 map {
+    word: String => Some(word.trim.toLowerCase.filterNot(_ == ','))
+  } times 4 map {
+    word: String => if (StopWords.contains(word)) Some(word) else None
+  } times 4 mapkv {
+    word: String => Some(KeyVal(word, 1))
+  } times 4 reduce {
+    (a: Int, b: Int) => a + b
+  } times 8 output self
 
   val mapper = myworkers.head
 
@@ -68,17 +65,7 @@ class MapReduceSupervisor extends Actor {
   }
 }
 
-case class MultipleFileReaders(filename: String)
-
-case object HammerdownProtocol
-
-object StopWords {
-  private val stopwords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
-
-  def contains(s: String) = stopwords.contains(s)
-}
-
-object PrintResults {
+object SsWcPrintResults {
   def apply[RedK, RedV](finalAggregate: Map[RedK, RedV]) = {
     println("FINAL RESULTS")
     val ag = finalAggregate.asInstanceOf[Map[String, Int]]

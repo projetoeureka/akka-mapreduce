@@ -12,7 +12,7 @@ import scala.reflect.ClassTag
 class ReducerTask[K: ClassTag, V: ClassTag](output: ActorRef, f: (V, V) => V) extends Actor {
   var aggregator: Map[K, V] = Map()
 
-  def updateAggregator(key:K, value: V) = {
+  def updateAggregator(key: K, value: V) = {
     val newValue = if (aggregator contains key) f(aggregator(key), value) else value
     aggregator += (key -> newValue)
   }

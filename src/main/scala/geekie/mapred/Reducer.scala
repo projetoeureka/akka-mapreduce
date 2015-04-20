@@ -1,6 +1,6 @@
 package geekie.mapred
 
-import akka.actor.{Actor, Props, ActorRef}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.routing.{Broadcast, ConsistentHashingPool}
 
 import scala.reflect.ClassTag

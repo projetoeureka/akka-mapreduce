@@ -23,7 +23,7 @@ class PiMapReduceSupervisor extends Actor {
   type RedK = String
   type RedV = BigDecimal
 
-  val myworkers = pipe_map { x: Int =>
+  val myworkers = pipe_mapkv { x: Int =>
     val x = random * 2 - 1
     val y = random * 2 - 1
     Seq(

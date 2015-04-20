@@ -8,19 +8,16 @@ import scala.reflect.ClassTag
  * Created by nlw on 17/04/15.
  * A pipeline builder
  */
-case class Pipeline[A: ClassTag, RedK: ClassTag, RedV: ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
+case class Pipeline[A:ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
 
-  type MapperFunction = A => Traversable[KeyVal[RedK, RedV]]
-  type ReducerFunction = (RedV, RedV) => RedV
+  def mapkv[K:ClassTag, V:ClassTag](myFunc: A => Traversable[KeyVal[K,V]]) =
+    PipelineKV[K, V](MapperFuncCommand[A, KeyVal[K,V]](myFunc) :: functionSeq)
 
-  def map(myFunc: MapperFunction): Pipeline[A, RedK, RedV] =
-    Pipeline(MapperFuncCommand(myFunc) :: functionSeq)
+  def map[B:ClassTag](myFunc: A => Traversable[B]) =
+    Pipeline[B](MapperFuncCommand[A, B](myFunc) :: functionSeq)
 
-  def reduce(myFunc: ReducerFunction): Pipeline[A, RedK, RedV] =
-    Pipeline(ReducerFuncCommand(myFunc) :: functionSeq)
-
-  def times(nWorkers: Int): Pipeline[A, RedK, RedV] =
-    Pipeline(MultiplyWorkers(nWorkers) ::  functionSeq)
+  def times(nWorkers: Int) =
+    Pipeline[A](MultiplyWorkers(nWorkers) :: functionSeq)
 
   def output(dest: ActorRef) = generatePipeline(dest)
 
@@ -30,34 +27,59 @@ case class Pipeline[A: ClassTag, RedK: ClassTag, RedV: ClassTag](functionSeq: Li
         val (out: List[ActorRef], nw: Int) = state
         buildCommand match {
           case MultiplyWorkers(newNw) => (out, newNw)
-          case MapperFuncCommand(func) =>
-            (Mapper[A, KeyVal[RedK, RedV]](out.head, nw)(func.asInstanceOf[MapperFunction]) :: out, 1)
-          case ReducerFuncCommand(func) =>
-            (Reducer[RedK, RedV](out.head, nw)(func.asInstanceOf[ReducerFunction]) :: out, 1)
+          case com: MRBuildWorkerCommand => (com.buildWorker(out.head, nw) :: out, 1)
         }
       }
     }._1
   }
 }
 
-object pipe_map {
-  def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag]
-  (myFunc: A => Traversable[KeyVal[RedK, RedV]])
-  (implicit context: ActorContext): Pipeline[A, RedK, RedV] =
-    Pipeline(List(MapperFuncCommand(myFunc)))
+case class PipelineKV[K:ClassTag, V:ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
+  def times(nWorkers: Int) =
+    PipelineKV[K,V](MultiplyWorkers(nWorkers) :: functionSeq)
+
+  def reduce(myFunc: (V, V) => V) =
+    Pipeline[V](ReducerFuncCommand[K, V](myFunc) :: functionSeq)
 }
 
-object pipe_reduce {
-  def apply[A: ClassTag, RedK: ClassTag, RedV: ClassTag]
-  (myFunc: (RedV, RedV) => RedV)
-  (implicit context: ActorContext): Pipeline[A, RedK, RedV] =
-    Pipeline(List(ReducerFuncCommand(myFunc)))
+object pipe_map {
+  def apply[A: ClassTag, B: ClassTag]
+  (myFunc: A => Traversable[B])
+  (implicit context: ActorContext) =
+    Pipeline[B](List(MapperFuncCommand[A, B](myFunc)))
 }
+
+object pipe_mapkv {
+  def apply[A: ClassTag, K:ClassTag, V:ClassTag]
+  (myFunc: A => Traversable[KeyVal[K,V]])
+  (implicit context: ActorContext) =
+    PipelineKV[K,V](List(MapperFuncCommand[A, KeyVal[K,V]](myFunc)))
+}
+
 
 sealed trait MRBuildCommand
 
-case class MapperFuncCommand[A, RedK, RedV](mapFun: A => Traversable[KeyVal[RedK, RedV]]) extends MRBuildCommand
+sealed trait MRBuildWorkerCommand extends MRBuildCommand {
+  def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef
+}
 
-case class ReducerFuncCommand[RedK, RedV](redFun: (RedV, RedV) => RedV) extends MRBuildCommand
+case class MapperFuncCommand[A: ClassTag, B: ClassTag](mapFun: A => Traversable[B]) extends MRBuildWorkerCommand {
+  override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef = Mapper[A, B](output, nw)(mapFun)
+}
+
+case class ReducerFuncCommand[K:ClassTag, V: ClassTag](redFun: (V, V) => V) extends MRBuildWorkerCommand {
+  override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef =
+    Reducer[K, V](output, nw)(redFun)
+}
+
+/*
+case class ReducerFuncCommand[KV: TypeTag, V: ClassTag:TypeTag](redFun: (V, V) => V) extends MRBuildWorkerCommand {
+  override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef =
+    typeOf[KV] match {
+      case t if t =:= typeOf[KeyVal[String, V]] =>
+        Reducer[String, V](output, nw)(redFun)
+    }
+}
+*/
 
 case class MultiplyWorkers(nw: Int) extends MRBuildCommand

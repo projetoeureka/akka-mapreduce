@@ -63,3 +63,6 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
     case HammerdownProtocol => context.system.shutdown()
   }
 }
+
+case class SingleFileReader(filename: String)
+
