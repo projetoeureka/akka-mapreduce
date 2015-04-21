@@ -8,13 +8,15 @@ import scala.reflect.ClassTag
  * Created by nlw on 17/04/15.
  * A pipeline builder
  */
-case class Pipeline[A:ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
+case class Pipeline[A: ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
 
-  def mapkv[K:ClassTag, V:ClassTag](myFunc: A => Traversable[KeyVal[K,V]]) =
-    PipelineKV[K, V](MapperFuncCommand[A, KeyVal[K,V]](myFunc) :: functionSeq)
+  def mapkv[K: ClassTag, V: ClassTag](myFunc: A => Traversable[KeyVal[K, V]]) = {
+    PipelineKV[K, V](MapperFuncCommand[A, KeyVal[K, V]](myFunc) :: functionSeq)
+  }
 
-  def map[B:ClassTag](myFunc: A => Traversable[B]) =
+  def map[B: ClassTag, K, V](myFunc: A => Traversable[B]) = {
     Pipeline[B](MapperFuncCommand[A, B](myFunc) :: functionSeq)
+  }
 
   def times(nWorkers: Int) =
     Pipeline[A](MultiplyWorkers(nWorkers) :: functionSeq)
@@ -22,24 +24,26 @@ case class Pipeline[A:ClassTag](functionSeq: List[MRBuildCommand])(implicit cont
   def output(dest: ActorRef) = generatePipeline(dest)
 
   def generatePipeline(dest: ActorRef) = {
-    ((List(dest), 1) /: functionSeq) {
+    ((List(dest), 1, 1) /: functionSeq) {
       (state, buildCommand) => {
-        val (out: List[ActorRef], nw: Int) = state
+        val (out: List[ActorRef], nw: Int, step: Int) = state
         buildCommand match {
-          case MultiplyWorkers(newNw) => (out, newNw)
-          case com: MRBuildWorkerCommand => (com.buildWorker(out.head, nw) :: out, 1)
+          case MultiplyWorkers(newNw) => (out, newNw, step + 1)
+          case com: MRBuildWorkerCommand => (com.buildWorker(out.head, step) :: out, 1, step + 1)
         }
       }
     }._1
   }
 }
 
-case class PipelineKV[K:ClassTag, V:ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
+case class PipelineKV[K: ClassTag, V: ClassTag](functionSeq: List[MRBuildCommand])(implicit context: ActorContext) {
+
   def times(nWorkers: Int) =
-    PipelineKV[K,V](MultiplyWorkers(nWorkers) :: functionSeq)
+    PipelineKV[K, V](MultiplyWorkers(nWorkers) :: functionSeq)
 
   def reduce(myFunc: (V, V) => V) =
-    Pipeline[V](ReducerFuncCommand[K, V](myFunc) :: functionSeq)
+    Pipeline[KeyVal[K, V]](ReducerFuncCommand[K, V](myFunc) :: functionSeq)
+
 }
 
 object pipe_map {
@@ -50,12 +54,9 @@ object pipe_map {
 }
 
 object pipe_mapkv {
-  def apply[A: ClassTag, K:ClassTag, V:ClassTag]
-  (myFunc: A => Traversable[KeyVal[K,V]])
-  (implicit context: ActorContext) =
-    PipelineKV[K,V](List(MapperFuncCommand[A, KeyVal[K,V]](myFunc)))
+  def apply[A: ClassTag, K: ClassTag, V: ClassTag](myFunc: A => Traversable[KeyVal[K, V]])(implicit context: ActorContext) =
+    PipelineKV[K, V](List(MapperFuncCommand[A, KeyVal[K, V]](myFunc)))
 }
-
 
 sealed trait MRBuildCommand
 
@@ -67,10 +68,18 @@ case class MapperFuncCommand[A: ClassTag, B: ClassTag](mapFun: A => Traversable[
   override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef = Mapper[A, B](output, nw)(mapFun)
 }
 
-case class ReducerFuncCommand[K:ClassTag, V: ClassTag](redFun: (V, V) => V) extends MRBuildWorkerCommand {
+case class ReducerFuncCommand[K: ClassTag, V: ClassTag](redFun: (V, V) => V) extends MRBuildWorkerCommand {
   override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef =
     Reducer[K, V](output, nw)(redFun)
 }
+
+
+/*
+case class ReducerFuncCommand[K, V](redFun: (V, V) => V) extends MRBuildWorkerCommand {
+  override def buildWorker(output: ActorRef, nw: Int)(implicit context: ActorContext): ActorRef =
+    Reducer[K, V](output, nw)(redFun)
+}
+*/
 
 /*
 case class ReducerFuncCommand[KV: TypeTag, V: ClassTag:TypeTag](redFun: (V, V) => V) extends MRBuildWorkerCommand {

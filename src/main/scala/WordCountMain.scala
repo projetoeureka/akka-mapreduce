@@ -36,14 +36,15 @@ class MapReduceSupervisor extends Actor {
   type RedK = String
   type RedV = Int
 
-  val nMappers = 4
+  val nMappers = 8
+  val nReducers = 8
 
   val myworkers = pipe_mapkv {ss: String =>
     (ss split raw"\s+")
       .map(word => word.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
-  } times nMappers reduce (_ + _) times 1 output self
+  } times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myworkers.head
 

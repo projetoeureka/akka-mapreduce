@@ -18,7 +18,10 @@ class ReducerTask[K: ClassTag, V: ClassTag](output: ActorRef, f: (V, V) => V) ex
   }
 
   def receive = {
-    case KeyVal(key: K, value: V) => updateAggregator(key, value)
+    case KeyVal(key: Any, value: V) =>
+      // TODO: make this work matching `key: K`
+      // println("RECEIVED KeyVal AT REDUCER")
+      updateAggregator(key.asInstanceOf[K], value)
     case GetAggregator => output ! ReducerResult(aggregator)
     case Forward(x) => output forward x
   }

@@ -35,12 +35,10 @@ class SsWcMapReduceSupervisor extends Actor {
   } times 4 map {
     word: String => Some(word.trim.toLowerCase.filterNot(_ == ','))
   } times 4 map {
-    word: String => if (StopWords.contains(word)) Some(word) else None
+    word: String => if (StopWords contains word) None else Some(word)
   } times 4 mapkv {
     word: String => Some(KeyVal(word, 1))
-  } times 4 reduce {
-    (a: Int, b: Int) => a + b
-  } times 8 output self
+  } times 4 reduce (_ + _) times 8 output self
 
   val mapper = myworkers.head
 
