@@ -17,6 +17,7 @@ class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => 
   val mapperRouter = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "mapper-router")
 
   def receive = {
+    case Forward(x) => output forward x
     case EndOfData => mapperRouter ! Broadcast(Forward(EndOfData))
     case x: Any => mapperRouter forward x
   }

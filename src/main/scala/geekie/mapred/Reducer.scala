@@ -17,6 +17,7 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V,
   val reducerRouter = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "reducer-router")
 
   def receive = {
+    case Forward(x) => output forward x
     case EndOfData =>
       reducerRouter ! Broadcast(GetAggregator)
       reducerRouter ! Broadcast(Forward(EndOfData))

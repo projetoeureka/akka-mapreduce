@@ -13,6 +13,9 @@ class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Traversable[B]) exten
   def receive = {
     case datum: A => f(datum) foreach (output ! _)
     case dataItr: Iterator[A] => dataItr flatMap f foreach (output ! _)
+    case (dataItr: Iterator[A], msg: Any) =>
+      dataItr flatMap f foreach (output ! _)
+      output ! msg
     case Forward(x) => output forward x
   }
 }
