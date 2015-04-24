@@ -24,7 +24,7 @@ class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => 
 }
 
 object Mapper {
-  def apply[A: ClassTag, B: ClassTag](output: ActorRef, nWorkers: Int)(f: A => Traversable[B])
+  def apply[A: ClassTag, B: ClassTag](output: ActorRef, nWorkers: Int, index: Int)(f: A => Traversable[B])
                                      (implicit context: akka.actor.ActorContext) =
-    context.actorOf(Props(new Mapper[A, B](output, nWorkers, f)), s"mapper-$nWorkers")
+    context.actorOf(Props(new Mapper[A, B](output, nWorkers, f)), s"mapper-$index")
 }
