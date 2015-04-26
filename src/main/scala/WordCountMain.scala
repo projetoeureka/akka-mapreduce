@@ -5,7 +5,6 @@ import geekie.mapred.io.FileChunks
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.io.Source
-import scala.reflect.ClassTag
 
 /**
  * Created by nlw on 05/04/15.
@@ -18,35 +17,29 @@ object WordCountMain extends App {
   else {
     val system = ActorSystem("akka-wordcount")
 
-    //    def mySup = MapReduceSupervisor[String,String,Int](4,4) {ss: String=>Seq(KeyVal("LINECOUNT", 1))} (_ + _)
-
     val wordcountSupervisor = system.actorOf(Props[MapReduceSupervisor], "wc-super")
     wordcountSupervisor ! MultipleFileReaders(args(0))
-    // wcSupAct ! SingleFileReader(args(0))
   }
 }
 
 class MapReduceSupervisor extends Actor {
-  /*
-    val reducer = Reducer[RedK, RedV](self, nReducers) (redFun)
-    val mapper = Mapper[A, KeyVal[RedK, RedV]](reducer, nMappers)(mapFun)
-  */
 
   type A = String
   type RedK = String
   type RedV = Int
 
-  val nMappers = 8
+  val nMappers = 4
   val nReducers = 8
+  val nChunks = nMappers * 4
 
-  val myworkers = pipe_mapkv {ss: String =>
+  val myWorkers = pipe_mapkv { ss: String =>
     (ss split raw"\s+")
       .map(word => word.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
   } times nMappers reduce (_ + _) times nReducers output self
 
-  val mapper = myworkers.head
+  val mapper = myWorkers.head
 
   var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
@@ -54,16 +47,22 @@ class MapReduceSupervisor extends Actor {
   def receive = {
     case MultipleFileReaders(filename) =>
       println(s"PROCESSING FILE $filename")
-      FileChunks(filename, nMappers) foreach (mapper ! _.iterator)
-      mapper ! EndOfData
+      FileChunks(filename, nChunks).zipWithIndex foreach {
+        case (chunk, n) => mapper ! DataChunk(chunk.iterator, n)
+      }
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[RedK, RedV]]
       finalAggregate = finalAggregate ++ ag
 
+    case ProgressReport(n) =>
+      progress += 1
+      println(f"CHUNK $n%2d - $progress%2d of $nChunks")
+      if (progress == nChunks) mapper ! Forward(EndOfData)
+
     case EndOfData =>
-      PrintResults(finalAggregate)
-      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+        PrintResults(finalAggregate)
+        context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
 
     case HammerdownProtocol => context.system.shutdown()
   }
@@ -74,9 +73,9 @@ case class MultipleFileReaders(filename: String)
 case object HammerdownProtocol
 
 object StopWords {
-  private val stopwords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
+  private val stopWords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
-  def contains(s: String) = stopwords.contains(s)
+  def contains(s: String) = stopWords.contains(s)
 }
 
 object PrintResults {

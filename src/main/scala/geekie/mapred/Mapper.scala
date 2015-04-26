@@ -10,15 +10,14 @@ import scala.reflect.ClassTag
  * An akka-mapreduce mapper, with a router and decimator
  */
 class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => Traversable[B]) extends Actor {
-  val mapperDecimator = context.actorOf(Props(classOf[Decimator], output, nMappers, EndOfData), "mapper-decimator")
-
-  def myMapper = MapperTask(mapperDecimator)(f)
+  def myMapper = MapperTask(output)(f)
 
   val mapperRouter = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "mapper-router")
 
   def receive = {
     case Forward(x) => output forward x
-    case EndOfData => mapperRouter ! Broadcast(Forward(EndOfData))
+    case ForwardToReducer(x) => output forward ForwardToReducer(x)
+    case ProgressReport(x) => output forward ProgressReport(x)
     case x: Any => mapperRouter forward x
   }
 }

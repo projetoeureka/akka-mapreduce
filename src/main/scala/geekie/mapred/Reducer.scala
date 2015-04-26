@@ -10,7 +10,7 @@ import scala.reflect.ClassTag
  * An akka-mapreduce reducer, with a router and decimator
  */
 class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V, V) => V) extends Actor {
-  val reducerDecimator = context.actorOf(Props(classOf[Decimator], output, nReducers, EndOfData), "reducer-decimator")
+  val reducerDecimator = context.actorOf(Props(classOf[Decimator], output, nReducers), "reducer-decimator")
 
   def myReducer = ReducerTask[K, V](reducerDecimator)(f)
 
@@ -18,6 +18,9 @@ class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V,
 
   def receive = {
     case Forward(x) => output forward x
+    case ForwardToReducer(x) => self forward x
+    case ProgressReport(n) =>
+      reducerRouter ! Broadcast(Forward(ProgressReport(n)))
     case EndOfData =>
       reducerRouter ! Broadcast(GetAggregator)
       reducerRouter ! Broadcast(Forward(EndOfData))

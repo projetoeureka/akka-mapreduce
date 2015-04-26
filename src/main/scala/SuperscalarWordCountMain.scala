@@ -29,16 +29,18 @@ class SsWcMapReduceSupervisor extends Actor {
   type RedV = Int
 
   val nMappers = 4
+  val nReducers = 8
+  val nChunks = nMappers * 4
 
   val myworkers = pipe_map {
     ss: String => ss split raw"\s+"
-  } times 4 map {
+  } times nMappers map {
     word: String => Some(word.trim.toLowerCase.filterNot(_ == ','))
   } times 4 map {
     word: String => if (StopWords contains word) None else Some(word)
   } times 4 mapkv {
     word: String => Some(KeyVal(word, 1))
-  } times 4 reduce (_ + _) times 8 output self
+  } times 4 reduce (_ + _) times nReducers output self
 
   val mapper = myworkers.head
 
@@ -48,12 +50,18 @@ class SsWcMapReduceSupervisor extends Actor {
   def receive = {
     case MultipleFileReaders(filename) =>
       println(s"PROCESSING FILE $filename")
-      FileChunks(filename, nMappers) foreach (mapper ! _.iterator)
-      mapper ! EndOfData
+      FileChunks(filename, nChunks).zipWithIndex foreach {
+        case (chunk, n) => mapper ! DataChunk(chunk.iterator, n)
+      }
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[RedK, RedV]]
       finalAggregate = finalAggregate ++ ag
+
+    case ProgressReport(n) =>
+      progress += 1
+      println(f"CHUNK $n%2d - $progress%2d of $nChunks")
+      if (progress == nChunks) mapper ! ForwardToReducer(EndOfData)
 
     case EndOfData =>
       PrintResults(finalAggregate)

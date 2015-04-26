@@ -23,14 +23,16 @@ class PiMapReduceSupervisor extends Actor {
   type RedK = String
   type RedV = BigDecimal
 
-  val myworkers = pipe_mapkv { x: Int =>
+  val nMappers = 4
+
+  val myworkers = pipe_mapkv { zz: Int =>
     val x = random * 2 - 1
     val y = random * 2 - 1
     Seq(
       KeyVal("SUM", BigDecimal(if (x * x + y * y < 1) 1 else 0)),
       KeyVal("N", BigDecimal(1))
     )
-  } times 4 reduce (_ + _) times 4 output self
+  } times nMappers reduce (_ + _) times 4 output self
 
   val mapper = myworkers.head
 
@@ -40,8 +42,9 @@ class PiMapReduceSupervisor extends Actor {
   def receive = {
     case StartCalculations =>
       println(s"STARTING MAPPERS")
-      mapper ! Stream.continually(1).take(1000000).iterator
-      mapper ! EndOfData
+      for (n <- 1 to nMappers)
+        mapper ! Stream.continually(1).take(1000000 / nMappers).iterator
+      mapper ! ForwardToReducer(EndOfData) // TODO: better flow control, every 1E6 iterations exactly
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[RedK, RedV]]
@@ -59,8 +62,8 @@ class PiMapReduceSupervisor extends Actor {
 object PiPrintResults {
   def apply[K, V](finalAggregate: Map[K, V]) = {
     val ag = finalAggregate.asInstanceOf[Map[String, BigDecimal]]
-    val s = ag("SUM")
-    val n = ag("N")
+    val s = ag.getOrElse("SUM", BigDecimal(1))
+    val n = ag.getOrElse("N", BigDecimal(2))
     println(s"Pi is roughly 4 * $s / $n ${4.0 * s / n}")
   }
 }

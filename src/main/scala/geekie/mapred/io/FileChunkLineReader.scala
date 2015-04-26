@@ -9,6 +9,21 @@ import java.io.File
  *
  */
 
+object FileChunks {
+  def apply(filename: String, nChunks: Int) = ChunkLimits(FileSize(filename), nChunks) map FileChunkLineReader(filename)
+}
+
+object ChunkLimits {
+  def apply(end: Long, nChunks: Int) = chunkStream(0L, end, nChunks)
+
+  def chunkStream(start: Long, end: Long, nChunks: Int): Stream[(Long, Long)] = {
+    if (nChunks > 1) {
+      val cut = start + (end - start) / nChunks
+      (start, cut) #:: chunkStream(cut, end, nChunks - 1)
+    } else (start, end) #:: Stream()
+  }
+}
+
 class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iterable[String] {
   def iterator = new Iterator[String] {
     private val lineItr = new FileCounterIterator(filename)
@@ -21,24 +36,9 @@ class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iter
   }
 }
 
-object FileChunks {
-  def apply(filename: String, nChunks: Int) = ChunkLimits(FileSize(filename), nChunks) map FileChunkLineReader(filename)
-}
-
 object FileChunkLineReader {
   def apply(filename: String, start: Long, end: Long) = new FileChunkLineReader(filename, start, end)
   def apply(filename: String)(range: (Long, Long)) = new FileChunkLineReader(filename, range._1, range._2)
-}
-
-object ChunkLimits {
-  def apply(end: Long, nChunks: Int) = chunkStream(0L, end, nChunks)
-
-  def chunkStream(start: Long, end: Long, nChunks: Int): Stream[(Long, Long)] = {
-    if (nChunks > 1) {
-      val cut = start + (end - start) / nChunks
-      (start, cut) #:: chunkStream(cut, end, nChunks - 1)
-    } else (start, end) #:: Stream()
-  }
 }
 
 object FileSize {
