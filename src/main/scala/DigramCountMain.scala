@@ -1,6 +1,6 @@
 import akka.actor._
 import geekie.mapred._
-import geekie.mapred.io.FileChunks
+import geekie.mapred.io.{FileChunkLineReader, FileChunks}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -12,12 +12,12 @@ import scala.concurrent.duration._
  */
 object DigramCountMain extends App {
   println("RUNNING DIGRAM M/R")
-  if (args.length < 1) println("MISSING INPUT FILENAME")
+  if (args.length < 2) println("MISSING INPUT FILENAME OR CHUNKS WINDOW SIZE")
   else {
     val system = ActorSystem("akka-wordcount")
 
     val wordcountSupervisor = system.actorOf(Props[DigramCountSupervisor], "wc-super")
-    wordcountSupervisor ! MultipleFileReaders(args(0))
+    wordcountSupervisor ! MultipleFileReadersWindow(args(0), args(1).toInt)
   }
 }
 
@@ -27,13 +27,14 @@ class DigramCountSupervisor extends Actor {
   type RedK = String
   type RedV = Int
 
-  val nMappers = 4
+  val nMappers = 8
   val nReducers = 8
   val nChunks = nMappers * 8
 
   val myWorkers = pipe_mapkv { rr: String =>
     val ss = rr.trim.toLowerCase
-    for (dig <- ss zip (ss.drop(1) + "\n")) yield KeyVal("" + dig._1 + dig._2, 1)
+    for (dig <- ss zip (ss.drop(1) + "\n"); n <- 1 to 10) yield
+    KeyVal("" + dig._1 + dig._2, 1)
   } times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
@@ -41,18 +42,27 @@ class DigramCountSupervisor extends Actor {
   var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
 
+  var chunkIterator: Iterator[(FileChunkLineReader, Int)] = _
+
+  def sendChunk(count: Int = 1) = {
+    val results = for {
+      (chunk, n) <- chunkIterator.take(count)
+    } yield mapper ! DataChunk(chunk.iterator, n)
+    results.length
+  }
+
   def receive = {
-    case MultipleFileReaders(filename) =>
+    case MultipleFileReadersWindow(filename, simchunks) =>
       println(s"PROCESSING FILE $filename")
-      FileChunks(filename, nChunks).zipWithIndex foreach {
-        case (chunk, n) => mapper ! DataChunk(chunk.iterator, n)
-      }
+      chunkIterator = FileChunks(filename, nChunks).zipWithIndex.iterator
+      sendChunk(simchunks)
 
     case ReducerResult(agAny) =>
       val ag = agAny.asInstanceOf[Map[RedK, RedV]]
       finalAggregate = finalAggregate ++ ag
 
     case ProgressReport(n) =>
+      sendChunk(1)
       progress += 1
       println(f"CHUNK $n%2d - $progress%2d of $nChunks")
       if (progress == nChunks) mapper ! Forward(EndOfData)
@@ -64,3 +74,5 @@ class DigramCountSupervisor extends Actor {
     case HammerdownProtocol => context.system.shutdown()
   }
 }
+
+case class MultipleFileReadersWindow(filename: String, simchunks: Int)
