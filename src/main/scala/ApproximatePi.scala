@@ -1,8 +1,8 @@
-/*import akka.actor.{Actor, ActorSystem, Props}
+import akka.actor.{Actor, ActorSystem, Props}
+import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
 
 import scala.math.random
-import scala.reflect.ClassTag
 
 /**
  * Created by nlw on 16/04/15.
@@ -25,7 +25,7 @@ class PiMapReduceSupervisor extends Actor {
 
   val nMappers = 4
 
-  val myworkers = pipe_mapkv { zz: Int =>
+  val myWorkers = PipelineStart[Int] map { zz =>
     val x = random * 2 - 1
     val y = random * 2 - 1
     Seq(
@@ -34,7 +34,7 @@ class PiMapReduceSupervisor extends Actor {
     )
   } times nMappers reduce (_ + _) times 4 output self
 
-  val mapper = myworkers.head
+  val mapper = myWorkers.head
 
   var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
@@ -69,4 +69,3 @@ object PiPrintResults {
 }
 
 case object StartCalculations
-*/

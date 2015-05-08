@@ -1,5 +1,5 @@
-/*
 import akka.actor._
+import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
 import geekie.mapred.io.FileChunks
 
@@ -33,13 +33,13 @@ class SsWcMapReduceSupervisor extends Actor {
   val nReducers = 8
   val nChunks = nMappers * 4
 
-  val myworkers = pipe_map {
-    ss: String => ss split raw"\s+"
+  val myworkers = PipelineStart[String] map {
+    ss => ss split raw"\s+"
   } times nMappers map {
     word: String => Some(word.trim.toLowerCase.filterNot(_ == ','))
   } times 4 map {
     word: String => if (StopWords contains word) None else Some(word)
-  } times 4 mapkv {
+  } times 4 map {
     word: String => Some(KeyVal(word, 1))
   } times 4 reduce (_ + _) times nReducers output self
 
@@ -81,4 +81,3 @@ object SsWcPrintResults {
     }
   }
 }
-*/

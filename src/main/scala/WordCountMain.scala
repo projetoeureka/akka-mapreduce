@@ -1,12 +1,11 @@
 import akka.actor._
+import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
 import geekie.mapred.io.FileChunks
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.io.Source
-
-import PipelineHelpers._
 
 /**
  * Created by nlw on 05/04/15.
@@ -34,7 +33,7 @@ class MapReduceSupervisor extends Actor {
   val nReducers = 8
   val nChunks = nMappers * 4
 
-  val myWorkers = Pipeline[String, String](List()) map { ss =>
+  val myWorkers = PipelineStart[String] map { ss =>
     (ss split raw"\s+")
       .map(word => word.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)

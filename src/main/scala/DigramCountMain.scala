@@ -1,5 +1,5 @@
-/*
 import akka.actor._
+import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
 import geekie.mapred.io.{FileChunkLineReader, FileChunks}
 
@@ -32,10 +32,10 @@ class DigramCountSupervisor extends Actor {
   val nReducers = 8
   val nChunks = nMappers * 8
 
-  val myWorkers = pipe_mapkv { rr: String =>
+  val myWorkers = PipelineStart[String] map { rr =>
     val ss = rr.trim.toLowerCase
-    for (dig <- ss zip (ss.drop(1) + "\n"); n <- 1 to 10) yield
-    KeyVal("" + dig._1 + dig._2, 1)
+    for (dig <- ss zip (ss.drop(1) + "\n"); n <- 1 to 10)
+      yield KeyVal("" + dig._1 + dig._2, 1)
   } times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
@@ -77,4 +77,3 @@ class DigramCountSupervisor extends Actor {
 }
 
 case class MultipleFileReadersWindow(filename: String, simchunks: Int)
-*/
