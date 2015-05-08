@@ -1,6 +1,7 @@
 package geekie.mapred
 
 import akka.actor.{Actor, ActorRef}
+import geekie.mapred.io.DataChunk
 
 import scala.reflect.ClassTag
 

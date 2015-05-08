@@ -17,11 +17,13 @@ case class KeyVal[K, V](key: K, value: V) extends ConsistentHashable {
   override def consistentHashKey = key
 }
 
+case class MultipleFileReaders(filename: String)
+
+case class FileSampler(filename: String, nChunks: Int, chunkMaxSize: Option[Int]=None)
+
 trait Decimable
 
 case class ProgressReport(n: Int) extends Decimable
-
-case class DataChunk[A](chunk: Iterator[A], n: Int)
 
 case object GetAggregator
 

@@ -1,7 +1,7 @@
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
-import geekie.mapred.io.FileChunks
+import geekie.mapred.io.{DataChunk, FileChunks}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._

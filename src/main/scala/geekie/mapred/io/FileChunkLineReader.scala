@@ -9,8 +9,19 @@ import java.io.File
  *
  */
 
+object LimitedEnumeratedFileChunks {
+  def apply(filename: String, nChunks: Int, chunkSizeLimit: Option[Int] = None) =
+    for ((chunk, n) <- FileChunks(filename, nChunks).zipWithIndex)
+      yield chunkSizeLimit match {
+        case Some(lim) => DataChunk(chunk.iterator.take(lim), n)
+        case None => DataChunk(chunk.iterator, n)
+      }
+
+}
+
 object FileChunks {
-  def apply(filename: String, nChunks: Int) = ChunkLimits(FileSize(filename), nChunks) map FileChunkLineReader(filename)
+  def apply(filename: String, nChunks: Int) =
+    ChunkLimits(FileSize(filename), nChunks) map FileChunkLineReader(filename)
 }
 
 object ChunkLimits {
@@ -38,9 +49,12 @@ class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iter
 
 object FileChunkLineReader {
   def apply(filename: String, start: Long, end: Long) = new FileChunkLineReader(filename, start, end)
+
   def apply(filename: String)(range: (Long, Long)) = new FileChunkLineReader(filename, range._1, range._2)
 }
 
 object FileSize {
   def apply(filename: String) = new File(filename).length
 }
+
+case class DataChunk[A](chunk: Iterator[A], n: Int)
