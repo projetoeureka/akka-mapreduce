@@ -6,6 +6,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.io.Source
 
+import PipelineHelpers._
+
 /**
  * Created by nlw on 05/04/15.
  * Akka based map-reduce task example with neat job flow control.
@@ -32,7 +34,7 @@ class MapReduceSupervisor extends Actor {
   val nReducers = 8
   val nChunks = nMappers * 4
 
-  val myWorkers = pipe_mapkv { ss: String =>
+  val myWorkers = Pipeline[String, String](List()) map { ss =>
     (ss split raw"\s+")
       .map(word => word.trim.toLowerCase.filterNot(_ == ','))
       .filterNot(StopWords.contains)
@@ -61,8 +63,8 @@ class MapReduceSupervisor extends Actor {
       if (progress == nChunks) mapper ! Forward(EndOfData)
 
     case EndOfData =>
-        PrintResults(finalAggregate)
-        context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+      PrintResults(finalAggregate)
+      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
 
     case HammerdownProtocol => context.system.shutdown()
   }

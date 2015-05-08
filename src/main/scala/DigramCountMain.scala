@@ -1,3 +1,4 @@
+/*
 import akka.actor._
 import geekie.mapred._
 import geekie.mapred.io.{FileChunkLineReader, FileChunks}
@@ -76,3 +77,4 @@ class DigramCountSupervisor extends Actor {
 }
 
 case class MultipleFileReadersWindow(filename: String, simchunks: Int)
+*/
