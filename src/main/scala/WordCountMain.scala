@@ -18,13 +18,14 @@ object WordCountMain extends App {
   else {
     val system = ActorSystem("akka-wordcount")
 
-    val wordcountSupervisor = system.actorOf(Props[MapReduceSupervisor], "wc-super")
-    wordcountSupervisor ! FileSplitter(args(0), 20)
-    // wordcountSupervisor ! FileSplitter(args(0), 100, Some(2))
+    val wordcountSupervisor = system.actorOf(Props[WordcountSupervisor], "wc-super")
+
+    wordcountSupervisor ! BeginJob(args(0))
   }
 }
 
-class MapReduceSupervisor extends Actor {
+
+class WordcountSupervisor extends Actor {
 
   type A = String
   type RedK = String
@@ -39,50 +40,27 @@ class MapReduceSupervisor extends Actor {
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
   } times nMappers reduce (_ + _) times nReducers output self
+
   val mapper = myWorkers.head
+
+  val dataSource = context.actorOf(Props(classOf[FileReader], mapper, nMappers * 2), "wc-super")
 
   var finalAggregate: Map[RedK, RedV] = Map()
 
-  val chunkWindow = nMappers * 2
-  var nChunks: Int = _
-  var chunkIterator: Iterator[DataChunk[String]] = _
-  var sentChunks = 0
-  var progress = 0
-
-  def sendChunks(n: Int = 1) = chunkIterator.take(n) foreach { chunk =>
-    mapper ! chunk
-    sentChunks += 1
-  }
-
-  def sendChunk() = sendChunks(1)
-
-  def printProgress(n: Int) = println(f"CHUNK $n%2d - $progress%2d of $nChunks (${progress * 100.0 / nChunks}%.1f%%)")
-
   def receive = {
-    case FileSplitter(filename, nChunks_, sampleSize) =>
-      println(s"SAMPLING FILE $filename")
-      nChunks = nChunks_
-      chunkIterator = LimitedEnumeratedFileChunks(filename, nChunks, sampleSize).iterator
-      sendChunks(chunkWindow)
-
-    case ProgressReport(n) =>
-      if (sentChunks < nChunks) sendChunk()
-      progress += 1
-      printProgress(n)
-      if (progress == nChunks) mapper ! ForwardToReducer(EndOfData)
-
+    case BeginJob(filename) =>
+      dataSource ! SplitFile(filename, 20)
+    case msg: ProgressReport =>
+      dataSource forward msg
     case ReducerResult(agAny) =>
       finalAggregate ++= agAny.asInstanceOf[Map[RedK, RedV]]
-
     case EndOfData =>
       PrintResults(finalAggregate)
-      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+      context.system.scheduler.scheduleOnce(2.second, self, HammerdownProtocol)
+    case HammerdownProtocol =>
+      context.system.shutdown()
   }
 }
-
-case class MultipleFileReaders(filename: String)
-
-case object HammerdownProtocol
 
 object StopWords {
   private val stopWords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
@@ -99,3 +77,7 @@ object PrintResults {
     }
   }
 }
+
+case class BeginJob(filename: String)
+
+case object HammerdownProtocol

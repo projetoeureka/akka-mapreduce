@@ -19,7 +19,7 @@ case class KeyVal[K, V](key: K, value: V) extends ConsistentHashable {
 
 case class MultipleFileReaders(filename: String)
 
-case class FileSplitter(filename: String, nChunks: Int, chunkMaxSize: Option[Int]=None)
+case class SplitFile(filename: String, nChunks: Int, chunkMaxSize: Option[Int]=None)
 
 trait Decimable
 
