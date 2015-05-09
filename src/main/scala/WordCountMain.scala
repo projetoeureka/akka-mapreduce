@@ -1,7 +1,7 @@
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
-import geekie.mapred.io.{DataChunk, FileChunks}
+import geekie.mapred.io.{DataChunk, LimitedEnumeratedFileChunks}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -19,7 +19,8 @@ object WordCountMain extends App {
     val system = ActorSystem("akka-wordcount")
 
     val wordcountSupervisor = system.actorOf(Props[MapReduceSupervisor], "wc-super")
-    wordcountSupervisor ! MultipleFileReaders(args(0))
+    wordcountSupervisor ! FileSplitter(args(0), 20)
+    // wordcountSupervisor ! FileSplitter(args(0), 100, Some(2))
   }
 }
 
@@ -31,7 +32,6 @@ class MapReduceSupervisor extends Actor {
 
   val nMappers = 4
   val nReducers = 8
-  val nChunks = nMappers * 4
 
   val myWorkers = PipelineStart[String] map { ss =>
     (ss split raw"\s+")
@@ -39,33 +39,44 @@ class MapReduceSupervisor extends Actor {
       .filterNot(StopWords.contains)
       .map(KeyVal(_, 1))
   } times nMappers reduce (_ + _) times nReducers output self
-
   val mapper = myWorkers.head
 
-  var progress = 0
   var finalAggregate: Map[RedK, RedV] = Map()
 
-  def receive = {
-    case MultipleFileReaders(filename) =>
-      println(s"PROCESSING FILE $filename")
-      FileChunks(filename, nChunks).zipWithIndex foreach {
-        case (chunk, n) => mapper ! DataChunk(chunk.iterator, n)
-      }
+  val chunkWindow = nMappers * 2
+  var nChunks: Int = _
+  var chunkIterator: Iterator[DataChunk[String]] = _
+  var sentChunks = 0
+  var progress = 0
 
-    case ReducerResult(agAny) =>
-      val ag = agAny.asInstanceOf[Map[RedK, RedV]]
-      finalAggregate = finalAggregate ++ ag
+  def sendChunks(n: Int = 1) = chunkIterator.take(n) foreach { chunk =>
+    mapper ! chunk
+    sentChunks += 1
+  }
+
+  def sendChunk() = sendChunks(1)
+
+  def printProgress(n: Int) = println(f"CHUNK $n%2d - $progress%2d of $nChunks (${progress * 100.0 / nChunks}%.1f%%)")
+
+  def receive = {
+    case FileSplitter(filename, nChunks_, sampleSize) =>
+      println(s"SAMPLING FILE $filename")
+      nChunks = nChunks_
+      chunkIterator = LimitedEnumeratedFileChunks(filename, nChunks, sampleSize).iterator
+      sendChunks(chunkWindow)
 
     case ProgressReport(n) =>
+      if (sentChunks < nChunks) sendChunk()
       progress += 1
-      println(f"CHUNK $n%2d - $progress%2d of $nChunks")
-      if (progress == nChunks) mapper ! Forward(EndOfData)
+      printProgress(n)
+      if (progress == nChunks) mapper ! ForwardToReducer(EndOfData)
+
+    case ReducerResult(agAny) =>
+      finalAggregate ++= agAny.asInstanceOf[Map[RedK, RedV]]
 
     case EndOfData =>
       PrintResults(finalAggregate)
       context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
-
-    case HammerdownProtocol => context.system.shutdown()
   }
 }
 
