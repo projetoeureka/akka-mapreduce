@@ -43,13 +43,15 @@ class WordcountSupervisor extends Actor {
 
   val mapper = myWorkers.head
 
-  val dataSource = context.actorOf(Props(classOf[FileReader], mapper, nMappers * 2), "wc-super")
-
   var finalAggregate: Map[RedK, RedV] = Map()
 
   def receive = {
     case BeginJob(filename) =>
-      dataSource ! SplitFile(filename, 20)
+      val dataSource = context.actorOf(Props(classOf[FileReader], mapper, filename, nMappers * 5, nMappers * 2, None), "wc-super")
+      context.become(working(dataSource))
+  }
+
+  def working(dataSource: ActorRef): Receive = {
     case msg: ProgressReport =>
       dataSource forward msg
     case ReducerResult(agAny) =>
