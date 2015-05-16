@@ -1,3 +1,5 @@
+package MapRedDemo
+
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
@@ -65,11 +67,15 @@ class SsWcMapReduceSupervisor extends Actor {
       if (progress == nChunks) mapper ! ForwardToReducer(EndOfData)
 
     case EndOfData =>
-      PrintResults(finalAggregate)
-      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+      PrintWordcountResults(finalAggregate)
+      context.system.scheduler.scheduleOnce(1.second, self, SsWcMapReduceSupervisor.HammerdownProtocol)
 
-    case HammerdownProtocol => context.system.shutdown()
+    case SsWcMapReduceSupervisor.HammerdownProtocol => context.system.shutdown()
   }
+}
+
+object SsWcMapReduceSupervisor{
+  case object HammerdownProtocol
 }
 
 object SsWcPrintResults {

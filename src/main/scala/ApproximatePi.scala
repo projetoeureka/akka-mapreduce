@@ -53,10 +53,14 @@ class PiMapReduceSupervisor extends Actor {
     case EndOfData =>
       PiPrintResults(finalAggregate)
       self ! StartCalculations
-    // context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+    // context.system.scheduler.scheduleOnce(1.second, self, PiMapReduceSupervisor.HammerdownProtocol)
 
-    case HammerdownProtocol => context.system.shutdown()
+    case PiMapReduceSupervisor.HammerdownProtocol => context.system.shutdown()
   }
+}
+
+object PiMapReduceSupervisor {
+  case object HammerdownProtocol
 }
 
 object PiPrintResults {

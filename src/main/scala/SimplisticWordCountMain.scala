@@ -1,3 +1,5 @@
+package MapRedDemo
+
 import akka.actor._
 import akka.routing.{Broadcast, ConsistentHashingPool, SmallestMailboxPool}
 import geekie.mapred._
@@ -19,13 +21,14 @@ object SimplisticWordCountMain extends App {
   if (args.length < 1) println("MISSING INPUT FILENAME")
   else {
     //wordcountSupervisor ! MultipleFileReaders(args(0))
-    wordcountSupervisor ! SingleFileReader(args(0))
+    wordcountSupervisor ! SimplisticWordCountSupervisor.SingleFileReader(args(0))
   }
 }
 
 class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor {
 
   def myReducer = ReducerTask[String, Int](self)(_ + _)
+
   val reducer = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "reducer")
 
   def myMapper = MapperTask(reducer) {
@@ -34,6 +37,7 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
       .filterNot(StopWords.contains)
       .map { ww => KeyVal(ww, 1) }
   }
+
   val mapper = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "mapper")
 
   context.watch(mapper)
@@ -43,7 +47,7 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
   var finalAggregate: Map[String, Int] = Map()
 
   def receive = {
-    case SingleFileReader(filename) =>
+    case SimplisticWordCountSupervisor.SingleFileReader(filename) =>
       println(s"PROCESSING FILE $filename")
       Source.fromFile(filename).getLines() foreach (mapper ! _)
       mapper ! Broadcast(PoisonPill)
@@ -57,12 +61,22 @@ class SimplisticWordCountSupervisor(nMappers: Int, nReducers: Int) extends Actor
       finalAggregate = finalAggregate ++ ag
 
     case Terminated(`reducer`) =>
-      PrintResults(finalAggregate)
-      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+      PrintWordcountResults(finalAggregate)
+      context.system.scheduler.scheduleOnce(1.second, self, SimplisticWordCountSupervisor.HammerdownProtocol)
 
-    case HammerdownProtocol => context.system.shutdown()
+    case SimplisticWordCountSupervisor.HammerdownProtocol => context.system.shutdown()
   }
 }
 
-case class SingleFileReader(filename: String)
+object SimplisticWordCountSupervisor {
+
+  case object HammerdownProtocol
+
+  case class SingleFileReader(filename: String)
+
+}
+
+
+
+
 

@@ -1,3 +1,5 @@
+package MapRedDemo
+
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
@@ -69,11 +71,15 @@ class DigramCountSupervisor extends Actor {
       if (progress == nChunks) mapper ! Forward(EndOfData)
 
     case EndOfData =>
-      PrintResults(finalAggregate)
-      context.system.scheduler.scheduleOnce(1.second, self, HammerdownProtocol)
+      PrintWordcountResults(finalAggregate)
+      context.system.scheduler.scheduleOnce(1.second, self, DigramCountSupervisor.HammerdownProtocol)
 
-    case HammerdownProtocol => context.system.shutdown()
+    case DigramCountSupervisor.HammerdownProtocol => context.system.shutdown()
   }
+}
+
+object DigramCountSupervisor {
+  case object HammerdownProtocol
 }
 
 case class MultipleFileReadersWindow(filename: String, simchunks: Int)
