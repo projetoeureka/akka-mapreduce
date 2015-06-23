@@ -4,6 +4,7 @@ import java.io.{File, PrintWriter}
 
 import akka.actor.Actor
 import geekie.mapred.EndOfData
+import geekie.mapred.io.OutputWriter.OutputWriterFileClosed
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods._
 
@@ -11,6 +12,11 @@ import org.json4s.jackson.JsonMethods._
   * An actor that receives lines to be written to a file.
   *
   */
+
+object OutputWriter {
+  case object OutputWriterFileClosed
+}
+
 class OutputWriter(output_file: String) extends Actor {
    val writer = new PrintWriter(new File(output_file))
 
