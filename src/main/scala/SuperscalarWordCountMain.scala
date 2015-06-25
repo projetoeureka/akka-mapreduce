@@ -54,7 +54,7 @@ class SsWcMapReduceSupervisor extends Actor {
     case MultipleFileReaders(filename) =>
       println(s"PROCESSING FILE $filename")
       FileChunks(filename, nChunks).zipWithIndex foreach {
-        case (chunk, n) => mapper ! DataChunk(chunk.iterator, n)
+        case (chunk, n) => mapper ! DataChunk(chunk, n)
       }
 
     case ReducerResult(agAny) =>

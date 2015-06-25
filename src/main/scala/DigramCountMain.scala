@@ -50,7 +50,7 @@ class DigramCountSupervisor extends Actor {
   def sendChunk(count: Int = 1) = {
     val results = for {
       (chunk, n) <- chunkIterator.take(count)
-    } yield mapper ! DataChunk(chunk.iterator, n)
+    } yield mapper ! DataChunk(chunk, n)
     results.length
   }
 

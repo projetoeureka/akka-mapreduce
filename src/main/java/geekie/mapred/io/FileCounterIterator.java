@@ -51,4 +51,8 @@ public class FileCounterIterator {
         this._position += nextLine.getBytes().length + _newlineLength;
         return nextLine;
     }
+
+    public void close() throws IOException {
+        this.fp.close();
+    }
 }

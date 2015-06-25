@@ -12,17 +12,15 @@ import java.io.File
 object LimitedEnumeratedFileChunks {
   def apply(filename: String, nChunks: Int, chunkSizeLimit: Option[Int] = None) =
     for ((chunk, n) <- FileChunks(filename, nChunks).zipWithIndex)
-      yield chunkSizeLimit match {
-        case Some(lim) => DataChunk(chunk.iterator.take(lim), n)
-        case None => DataChunk(chunk.iterator, n)
-      }
-
+      yield DataChunk[String](chunk, n, chunkSizeLimit)
 }
+
 
 object FileChunks {
   def apply(filename: String, nChunks: Int) =
     ChunkLimits(FileSize(filename), nChunks) map FileChunkLineReader(filename)
 }
+
 
 object ChunkLimits {
   def apply(end: Long, nChunks: Int) = chunkStream(0L, end, nChunks)
@@ -35,9 +33,11 @@ object ChunkLimits {
   }
 }
 
+
 class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iterable[String] {
+  private val lineItr = new FileCounterIterator(filename)
+
   def iterator = new Iterator[String] {
-    private val lineItr = new FileCounterIterator(filename)
 
     if (start > 0) lineItr.seek(start).readLine()
 
@@ -45,7 +45,10 @@ class FileChunkLineReader(filename: String, start: Long, end: Long) extends Iter
 
     def next() = lineItr.readLine()
   }
+
+  def close() = lineItr.close()
 }
+
 
 object FileChunkLineReader {
   def apply(filename: String, start: Long, end: Long) = new FileChunkLineReader(filename, start, end)
@@ -53,8 +56,10 @@ object FileChunkLineReader {
   def apply(filename: String)(range: (Long, Long)) = new FileChunkLineReader(filename, range._1, range._2)
 }
 
+
 object FileSize {
   def apply(filename: String) = new File(filename).length
 }
 
-case class DataChunk[A](chunk: Iterator[A], n: Int)
+
+case class DataChunk[A](chunk: FileChunkLineReader, n: Int, limit: Option[Int] = None)
