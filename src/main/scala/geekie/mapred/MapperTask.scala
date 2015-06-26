@@ -16,13 +16,12 @@ class MapperTask[A: ClassTag, B](output: ActorRef, f: A => Traversable[B]) exten
     case dataItr: Iterator[A] => dataItr flatMap f foreach (output ! _)
     case DataChunk(chunk: FileChunkLineReader, n, limit) =>
       try {
-        val dataItr = if(limit.isDefined) chunk.iterator.take(limit.get) else chunk.iterator
-        dataItr flatMap f.asInstanceOf[String=>Traversable[B]] foreach (output ! _)
+        val dataItr = if (limit.isDefined) chunk.iterator.take(limit.get) else chunk.iterator
+        dataItr flatMap f.asInstanceOf[String => Traversable[B]] foreach (output ! _)
         output ! ProgressReport(n)
       } finally {
         chunk.close()
       }
-
 
     case Forward(x) => output forward x
   }
