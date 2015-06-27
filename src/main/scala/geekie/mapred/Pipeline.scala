@@ -14,7 +14,7 @@ case class Pipeline[A: ClassTag, V: ClassTag](functionSeq: List[MRBuildCommand]=
   //    Pipeline[B, B](MapperFuncCommand[A, B](myFunc) :: functionSeq)
   //  }
 
-  def map[B: ClassTag, X](ff: A => Traversable[B])(implicit fa: FunctionAdapter[A, B, X]) =
+  def map[B: ClassTag, X](ff: A => TraversableOnce[B])(implicit fa: FunctionAdapter[A, B, X]) =
     fa.build(ff, functionSeq)
 
   def reduce[K: ClassTag](myFunc: (V, V) => V)(implicit ev: KeyVal[K, V] =:= A) =

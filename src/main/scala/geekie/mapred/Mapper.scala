@@ -9,7 +9,7 @@ import scala.reflect.ClassTag
  * Created by nlw on 15/04/15.
  * An akka-mapreduce mapper, with a router and decimator
  */
-class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => Traversable[B]) extends Actor {
+class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => TraversableOnce[B]) extends Actor {
   def myMapper = MapperTask(output)(f)
 
   val mapperRouter = context.actorOf(SmallestMailboxPool(nMappers).props(Props(myMapper)), "mapper-router")
@@ -23,7 +23,7 @@ class Mapper[A: ClassTag, B: ClassTag](output: ActorRef, nMappers: Int, f: A => 
 }
 
 object Mapper {
-  def apply[A: ClassTag, B: ClassTag](output: ActorRef, nWorkers: Int, index: Int)(f: A => Traversable[B])
+  def apply[A: ClassTag, B: ClassTag](output: ActorRef, nWorkers: Int, index: Int)(f: A => TraversableOnce[B])
                                      (implicit context: akka.actor.ActorContext) =
     context.actorOf(Props(new Mapper[A, B](output, nWorkers, f)), s"mapper-$index")
 }

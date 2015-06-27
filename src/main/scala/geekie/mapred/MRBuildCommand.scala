@@ -10,7 +10,7 @@ sealed trait MRBuildWorkerCommand extends MRBuildCommand {
   def buildWorker(output: ActorRef, nw: Int, ind: Int)(implicit context: ActorContext): ActorRef
 }
 
-case class MapperFuncCommand[A: ClassTag, B: ClassTag](mapFun: A => Traversable[B]) extends MRBuildWorkerCommand {
+case class MapperFuncCommand[A: ClassTag, B: ClassTag](mapFun: A => TraversableOnce[B]) extends MRBuildWorkerCommand {
   override def buildWorker(output: ActorRef, nw: Int, ind: Int)(implicit context: ActorContext): ActorRef =
     Mapper[A, B](output, nw, ind)(mapFun)
 }
