@@ -10,7 +10,7 @@ object AkkaMapreduceBuild extends Build {
     Seq(
       "com.typesafe.akka" %% "akka-actor" % akkaV,
       "org.scala-lang" % "scala-reflect" % "2.11.6",
-      "org.json4s" %% "json4s-jackson" % "3.2.11"
+      "org.json4s" %% "json4s-native" % "3.2.11"
     )
   }
 

@@ -6,7 +6,7 @@ import akka.actor.Actor
 import geekie.mapred.EndOfData
 import geekie.mapred.io.OutputWriter.OutputWriterFileClosed
 import org.json4s.JsonAST.JValue
-import org.json4s.jackson.JsonMethods._
+import org.json4s.native.JsonMethods._
 
 /**
   * An actor that receives lines to be written to a file.
