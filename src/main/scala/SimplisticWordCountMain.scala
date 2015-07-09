@@ -1,4 +1,4 @@
-package MapRedDemo
+package demo
 
 import akka.actor._
 import akka.routing.{Broadcast, ConsistentHashingPool, SmallestMailboxPool}

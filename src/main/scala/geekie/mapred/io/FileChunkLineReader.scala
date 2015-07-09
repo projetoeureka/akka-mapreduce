@@ -12,7 +12,7 @@ import java.io.File
 object LimitedEnumeratedFileChunks {
   def apply(filename: String, nChunks: Int, chunkSizeLimit: Option[Int] = None) =
     for ((chunk, n) <- FileChunks(filename, nChunks).zipWithIndex)
-      yield DataChunk[String](chunk, n, chunkSizeLimit)
+      yield FileChunk(chunk, n, chunkSizeLimit)
 }
 
 
@@ -62,4 +62,6 @@ object FileSize {
 }
 
 
-case class DataChunk[A](chunk: FileChunkLineReader, n: Int, limit: Option[Int] = None)
+case class DataChunk[A](chunk: TraversableOnce[A], n: Int, limit: Option[Int] = None)
+
+case class FileChunk(chunk: FileChunkLineReader, n: Int, limit: Option[Int] = None)

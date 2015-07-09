@@ -1,7 +1,7 @@
 package geekie.mapred
 
 import akka.actor.{Actor, ActorRef}
-import geekie.mapred.io.{FileChunkLineReader, DataChunk}
+import geekie.mapred.io.{DataChunk, FileChunkLineReader, FileChunk}
 
 import scala.reflect.ClassTag
 
@@ -13,8 +13,15 @@ import scala.reflect.ClassTag
 class MapperTask[A: ClassTag, B](output: ActorRef, f: A => TraversableOnce[B]) extends Actor {
   def receive = {
     case datum: A => f(datum) foreach (output ! _)
+
     case dataItr: Iterator[A] => dataItr flatMap f foreach (output ! _)
-    case DataChunk(chunk: FileChunkLineReader, n, limit) =>
+
+    case DataChunk(chunk: TraversableOnce[A], n, limit) =>
+      val dataItr = if (limit.isDefined) chunk.toIterator.take(limit.get) else chunk.toIterator
+      dataItr flatMap f foreach (output ! _)
+      output ! ProgressReport(n)
+
+    case FileChunk(chunk: FileChunkLineReader, n, limit) =>
       try {
         val dataItr = if (limit.isDefined) chunk.iterator.take(limit.get) else chunk.iterator
         dataItr flatMap f.asInstanceOf[String => TraversableOnce[B]] foreach (output ! _)

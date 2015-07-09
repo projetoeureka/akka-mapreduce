@@ -1,7 +1,7 @@
 package geekie.mapred
 
 import akka.actor.{ActorLogging, Actor, ActorRef}
-import geekie.mapred.io.{DataChunk, LimitedEnumeratedFileChunks}
+import geekie.mapred.io.{DataChunk, FileChunk, LimitedEnumeratedFileChunks}
 
 class FileReader(output: ActorRef,
                  filename: String,
@@ -15,7 +15,7 @@ class FileReader(output: ActorRef,
 
   def receive = chunkEmitter(allChunks.drop(chunkWindow), List())
 
-  def chunkEmitter[T](chunks: Stream[DataChunk[T]], done: List[Int]): Receive = {
+  def chunkEmitter[T](chunks: Stream[FileChunk], done: List[Int]): Receive = {
     case ProgressReport(n) =>
       chunks.take(1) foreach (output ! _)
       val nDone = 1 + done.length
@@ -27,3 +27,5 @@ class FileReader(output: ActorRef,
   def logProgress(n: Int, nDone: Int) =
     log.info(f"CHUNK $n%2d - $nDone%2d of $nChunks (${nDone * 100.0 / nChunks}%.1f%%)")
 }
+
+

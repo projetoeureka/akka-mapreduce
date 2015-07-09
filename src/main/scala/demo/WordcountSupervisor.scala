@@ -1,4 +1,4 @@
-package MapRedDemo
+package demo
 
 import akka.actor._
 import geekie.mapred.PipelineHelpers._

@@ -1,9 +1,9 @@
-package MapRedDemo
+package demo
 
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
-import geekie.mapred.io.{DataChunk, FileChunks}
+import geekie.mapred.io.{FileChunk, FileChunks}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -54,7 +54,7 @@ class SsWcMapReduceSupervisor extends Actor {
     case MultipleFileReaders(filename) =>
       println(s"PROCESSING FILE $filename")
       FileChunks(filename, nChunks).zipWithIndex foreach {
-        case (chunk, n) => mapper ! DataChunk(chunk, n)
+        case (chunk, n) => mapper ! FileChunk(chunk, n)
       }
 
     case ReducerResult(agAny) =>

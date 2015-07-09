@@ -1,9 +1,9 @@
-package MapRedDemo
+package demo
 
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
-import geekie.mapred.io.{DataChunk, FileChunkLineReader, FileChunks}
+import geekie.mapred.io.{FileChunk, FileChunkLineReader, FileChunks}
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -50,7 +50,7 @@ class DigramCountSupervisor extends Actor {
   def sendChunk(count: Int = 1) = {
     val results = for {
       (chunk, n) <- chunkIterator.take(count)
-    } yield mapper ! DataChunk(chunk, n)
+    } yield mapper ! FileChunk(chunk, n)
     results.length
   }
 
