@@ -15,6 +15,8 @@ import scala.io.Source
  */
 class WordcountSupervisor extends Actor {
 
+  import geekie.mapred.CounterHelpers._
+
   println("RUNNING NEAT M/R")
 
   type A = String
@@ -23,12 +25,17 @@ class WordcountSupervisor extends Actor {
 
   val stopWords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
-  val nMappers = 4
-  val nReducers = 8
+  def propertyOrDefault(propertyName: String, default: Int) = sys.props.get(propertyName) map (_.toInt) getOrElse default
+
+  val nMappers = propertyOrDefault("mappers", 4)
+  val nReducers = propertyOrDefault("reducers", 4)
+  val nChunks = propertyOrDefault("chunks", nMappers * 4)
+  val chunkWindow = propertyOrDefault("reducers", nMappers * 2)
+  val chunkSizeMax = sys.props.get("chunk.size.max") map (_.toInt)
 
   val myWorkers = PipelineStart[String] map { ss =>
-    (ss split raw"\s+")
-      .map(word => word.trim.toLowerCase.filterNot(_ == ','))
+    (ss split raw"[.,\-\s]+")
+      .map(word => word.trim.toLowerCase)
       .filterNot(stopWords.contains)
       .map(KeyVal(_, 1))
   } times nMappers reduce (_ + _) times nReducers output self
@@ -39,7 +46,7 @@ class WordcountSupervisor extends Actor {
 
   val filename = System.getProperty("filename")
 
-  val dataSource = context.actorOf(Props(classOf[FileReader], mapper, filename, nMappers * 5, nMappers * 2, None), "wc-super")
+  val dataSource = context.actorOf(Props(classOf[FileChunkSource], mapper, filename, nChunks, chunkWindow, chunkSizeMax), "wc-super")
 
   def receive = working(dataSource)
 
@@ -47,7 +54,7 @@ class WordcountSupervisor extends Actor {
     case msg: ProgressReport =>
       dataSource forward msg
     case ReducerResult(agAny) =>
-      finalAggregate ++= agAny.asInstanceOf[Map[RedK, RedV]]
+      finalAggregate = finalAggregate + agAny.asInstanceOf[Map[RedK, RedV]]
     case EndOfData =>
       PrintWordcountResults(finalAggregate)
       context.system.scheduler.scheduleOnce(2.second, self, PoisonPill)

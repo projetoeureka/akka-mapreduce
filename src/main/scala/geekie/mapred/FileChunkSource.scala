@@ -3,11 +3,11 @@ package geekie.mapred
 import akka.actor.{ActorLogging, Actor, ActorRef}
 import geekie.mapred.io.{DataChunk, FileChunk, LimitedEnumeratedFileChunks}
 
-class FileReader(output: ActorRef,
-                 filename: String,
-                 nChunks: Int,
-                 chunkWindow: Int,
-                 sampleSize: Option[Int]) extends Actor with ActorLogging {
+class FileChunkSource(output: ActorRef,
+                      filename: String,
+                      nChunks: Int,
+                      chunkWindow: Int,
+                      sampleSize: Option[Int]) extends Actor with ActorLogging {
 
   log.info(s"SAMPLING FILE $filename")
   val allChunks = LimitedEnumeratedFileChunks(filename, nChunks, sampleSize)

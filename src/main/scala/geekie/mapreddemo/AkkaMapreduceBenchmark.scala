@@ -14,31 +14,35 @@ import scala.concurrent.duration._
  */
 class AkkaMapreduceBenchmark extends Actor {
 
+  import geekie.mapred.CounterHelpers._
+
   println("RUNNING AKKA MAPREDUCE BENCHMARK")
 
-  type RedK = String
+  type RedK = Int
   type RedV = Int
 
-  val nMappers = System.getProperty("mappers", "4").toInt
-  val nReducers = System.getProperty("reducers", "4").toInt
-  val nKeys = System.getProperty("num.keys", "10").toInt
-  val windowSize = System.getProperty("window", "8").toInt
-  val nChunks = System.getProperty("num.chunks", "1000").toInt
-  val chunkSize = System.getProperty("chunk.size", "10000").toLong
+  def propertyOrDefault(propertyName: String, default: Int) = sys.props.get(propertyName) map (_.toInt) getOrElse default
 
-  val myWorkers = PipelineStart[Long] map { batchSize: Long =>
-    (0L until batchSize).iterator map (_ % nKeys) map (KeyVal(_, 1))
+  val nMappers = propertyOrDefault("mappers", 4)
+  val nReducers = propertyOrDefault("reducers", 4)
+  val nChunks = propertyOrDefault("chunks", nMappers * 4)
+  val chunkWindow = propertyOrDefault("reducers", nMappers * 2)
+  val chunkSizeMax = sys.props.get("chunk.size.max") map (_.toInt)
+  val nKeys = propertyOrDefault("keys", 10)
+
+  val myWorkers = PipelineStart[Int] map { batchSize: Int =>
+    (0 until batchSize).iterator map (_ % nKeys) map (KeyVal(_, 1))
   } times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
 
   var finalAggregate: Map[RedK, RedV] = Map()
 
-  val theData = (0 until nChunks) map (DataChunk(List(chunkSize), _, None))
+  val theData = (0 until nChunks) map (DataChunk(List(chunkSizeMax.get), _, None))
+
+  val dataSource = context.actorOf(Props(classOf[DataChunkSource[Int]], mapper, theData, chunkWindow, Some(nChunks)), "wc-super")
 
   val startTime = System.currentTimeMillis()
-
-  val dataSource = context.actorOf(Props(classOf[DataChunkSource[Int]], mapper, theData, windowSize, Some(nChunks)), "wc-super")
 
   def receive = working(dataSource)
 
@@ -46,11 +50,12 @@ class AkkaMapreduceBenchmark extends Actor {
     case msg: ProgressReport =>
       dataSource forward msg
     case ReducerResult(agAny) =>
-      finalAggregate ++= agAny.asInstanceOf[Map[RedK, RedV]]
+      finalAggregate = finalAggregate + agAny.asInstanceOf[Map[RedK, RedV]]
     case EndOfData =>
       PrintWordcountResults(finalAggregate)
       context.system.scheduler.scheduleOnce(2.second, self, PoisonPill)
       val totalTime = (System.currentTimeMillis() - startTime) / 1e3
+      println(f"TOTAL COUNT: ${finalAggregate.values.sum}")
       println(f"TOTAL TIME: $totalTime%.2fs")
   }
 }

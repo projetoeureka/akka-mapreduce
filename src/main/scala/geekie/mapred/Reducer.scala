@@ -1,7 +1,7 @@
 package geekie.mapred
 
-import akka.actor.{Actor, ActorRef, Props}
-import akka.routing.{Broadcast, ConsistentHashingPool}
+import akka.actor.{Actor, ActorRef, Props, Terminated}
+import akka.routing.BalancingPool
 
 import scala.reflect.ClassTag
 
@@ -10,21 +10,22 @@ import scala.reflect.ClassTag
  * An akka-mapreduce reducer, with a router and decimator
  */
 class Reducer[K: ClassTag, V: ClassTag](output: ActorRef, nReducers: Int, f: (V, V) => V) extends Actor {
-  val reducerDecimator = context.actorOf(Props(classOf[Decimator], output, nReducers), "reducer-decimator")
+  def myReducer = ReducerTask[K, V](output)(f)
 
-  def myReducer = ReducerTask[K, V](reducerDecimator)(f)
-
-  val reducerRouter = context.actorOf(ConsistentHashingPool(nReducers).props(Props(myReducer)), "reducer-router")
+  val reducerRouter = context.actorOf(Props(myReducer).withRouter(BalancingPool(nReducers)), "reducer-router")
+  context.watch(reducerRouter)
 
   def receive = {
     case Forward(x) => output forward x
     case ForwardToReducer(x) => self forward x
     case ProgressReport(n) =>
-      reducerRouter ! Broadcast(Forward(ProgressReport(n)))
+      reducerRouter ! Forward(ProgressReport(n))
     case EndOfData =>
-      reducerRouter ! Broadcast(GetAggregator)
-      reducerRouter ! Broadcast(Forward(EndOfData))
-    case x: Any => reducerRouter forward x
+      for (_ <- 1 to nReducers) reducerRouter ! GetAggregator
+    case Terminated(`reducerRouter`) =>
+      output ! EndOfData
+    case x: Any =>
+      reducerRouter forward x
   }
 }
 
