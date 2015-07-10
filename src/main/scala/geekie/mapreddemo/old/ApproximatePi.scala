@@ -1,3 +1,5 @@
+package geekie.mapreddemo.old
+
 import akka.actor.{Actor, ActorSystem, Props}
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._

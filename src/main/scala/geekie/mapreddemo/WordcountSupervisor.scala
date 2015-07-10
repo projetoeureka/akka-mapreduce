@@ -1,4 +1,4 @@
-package demo
+package geekie.mapreddemo
 
 import akka.actor._
 import geekie.mapred.PipelineHelpers._

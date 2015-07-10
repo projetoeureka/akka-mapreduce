@@ -1,4 +1,4 @@
-package demo
+package geekie.mapreddemo.old
 
 import akka.actor._
 import akka.routing.{Broadcast, ConsistentHashingPool, SmallestMailboxPool}

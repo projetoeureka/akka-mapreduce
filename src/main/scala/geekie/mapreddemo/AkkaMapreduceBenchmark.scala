@@ -1,4 +1,4 @@
-package demo
+package geekie.mapreddemo
 
 import akka.actor._
 import geekie.mapred.PipelineHelpers._
@@ -38,7 +38,7 @@ class AkkaMapreduceBenchmark extends Actor {
 
   val startTime = System.currentTimeMillis()
 
-  val dataSource = context.actorOf(Props(classOf[ChunkScheduler[Int]], mapper, theData, windowSize, Some(nChunks)), "wc-super")
+  val dataSource = context.actorOf(Props(classOf[DataChunkSource[Int]], mapper, theData, windowSize, Some(nChunks)), "wc-super")
 
   def receive = working(dataSource)
 

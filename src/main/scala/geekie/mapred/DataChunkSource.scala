@@ -3,11 +3,11 @@ package geekie.mapred
 import akka.actor.{Actor, ActorLogging, ActorRef}
 import geekie.mapred.io.DataChunk
 
-class ChunkScheduler[A](output: ActorRef,
-                        allChunks: TraversableOnce[DataChunk[A]],
-                        chunkWindow: Int,
-                        nChunks: Option[Int]
-                         ) extends Actor with ActorLogging {
+class DataChunkSource[A](output: ActorRef,
+                         allChunks: TraversableOnce[DataChunk[A]],
+                         chunkWindow: Int,
+                         nChunks: Option[Int]
+                          ) extends Actor with ActorLogging {
 
   val chunksItr = allChunks.toIterator
 
