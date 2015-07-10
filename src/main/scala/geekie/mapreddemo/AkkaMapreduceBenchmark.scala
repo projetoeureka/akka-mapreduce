@@ -32,7 +32,7 @@ class AkkaMapreduceBenchmark extends Actor {
 
   val myWorkers = PipelineStart[Int] map { batchSize: Int =>
     (0 until batchSize).iterator map (_ % nKeys) map (KeyVal(_, 1))
-  } times nMappers reduce (_ + _) times nReducers output self
+  } lazymap true times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
 
