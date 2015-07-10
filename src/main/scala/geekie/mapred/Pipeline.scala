@@ -8,32 +8,34 @@ import scala.reflect.ClassTag
  * Created by nlw on 17/04/15.
  * A map-reduce pipeline builder. Still gotta figure out how to avoid the "mapkv" methods, and infer the reducibility
  */
-case class Pipeline[A: ClassTag, V: ClassTag](functionSeq: List[MRBuildCommand]=List())(implicit context: ActorContext) {
-
-  //  def map[B: ClassTag](myFunc: A => Traversable[B]) = {
-  //    Pipeline[B, B](MapperFuncCommand[A, B](myFunc) :: functionSeq)
-  //  }
+case class Pipeline[A: ClassTag, V: ClassTag](functionSeq: List[MRBuildCommand] = List())(implicit context: ActorContext) {
 
   def map[B: ClassTag, X](ff: A => TraversableOnce[B])(implicit fa: FunctionAdapter[A, B, X]) =
     fa.build(ff, functionSeq)
 
-  def reduce[K: ClassTag](myFunc: (V, V) => V)(implicit ev: KeyVal[K, V] =:= A) =
+  def reduce[K: ClassTag](myFunc: (V, V) => V)(implicit ev: A <:< Reducible[K, V]) =
     Pipeline[A, V](ReducerFuncCommand[K, V](myFunc) :: functionSeq)
 
   def times(nWorkers: Int) =
     Pipeline[A, V](MultiplyWorkers(nWorkers) :: functionSeq)
 
-  def output(dest: ActorRef) = generatePipeline(dest)
+  def lazymap(isLazy: Boolean) =
+    Pipeline[A, V](LazyMap(isLazy) :: functionSeq)
 
-  def generatePipeline(dest: ActorRef) = ((List(dest), 1, 1) /: functionSeq) {
+  def output(dest: ActorRef) = generatePipeline(dest).actors
+
+  def generatePipeline(dest: ActorRef) = (MRBuildState(List(dest), 1, false, 1) /: functionSeq) {
     (state, buildCommand) => state match {
-      case (out, nw, step) => buildCommand match {
-        case MultiplyWorkers(newNw) => (out, newNw, step)
-        case com: MRBuildWorkerCommand => (com.buildWorker(out.head, nw, step) :: out, 1, step + 1)
+      case MRBuildState(out, nw, lm, step) => buildCommand match {
+        case MultiplyWorkers(newNw) => MRBuildState(out, newNw, lm, step)
+        case LazyMap(isLazy) => MRBuildState(out, nw, isLazy, step)
+        case com: MRBuildWorkerCommand => MRBuildState(com.buildWorker(out.head, nw, lm, step) :: out, 1, false, step + 1)
       }
     }
-  }._1
+  }
 }
+
+case class MRBuildState(actors: List[ActorRef], nWorkers: Int, lazyMap: Boolean, stepN: Int)
 
 object PipelineStart {
   def apply[A: ClassTag](implicit context: ActorContext) = Pipeline[A, A](List())

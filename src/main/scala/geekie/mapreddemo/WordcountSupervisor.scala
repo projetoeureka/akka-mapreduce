@@ -1,6 +1,7 @@
 package geekie.mapreddemo
 
 import akka.actor._
+import geekie.mapred.MapperTask.LazyMap
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
 
@@ -34,11 +35,14 @@ class WordcountSupervisor extends Actor {
   val chunkSizeMax = sys.props.get("chunk.size.max") map (_.toInt)
 
   val myWorkers = PipelineStart[String] map { ss =>
-    (ss split raw"[.,\-\s]+")
-      .map(word => word.trim.toLowerCase)
-      .filterNot(stopWords.contains)
-      .map(KeyVal(_, 1))
-  } times nMappers reduce (_ + _) times nReducers output self
+    Some(ss)
+  } times nMappers map { ss: String =>
+    for {
+      word <- ("""[.,\-\s]+""".r split ss).iterator
+      lower = word.trim.toLowerCase
+      if !(stopWords contains lower)
+    } yield KeyVal(lower, 1)
+  } lazymap true times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
 
@@ -60,3 +64,5 @@ class WordcountSupervisor extends Actor {
       context.system.scheduler.scheduleOnce(2.second, self, PoisonPill)
   }
 }
+
+case class MyRow(value: String) extends AnyVal

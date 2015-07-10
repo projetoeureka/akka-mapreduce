@@ -13,20 +13,20 @@ case class Forward[T](obj: T)
 
 case class ForwardToReducer[T](obj: T)
 
-case class KeyVal[K, V](key: K, value: V) extends ConsistentHashable {
-  override def consistentHashKey = key
-}
+trait Reducible[K, V]
+
+case class KeyVal[K, V](key: K, value: V) extends Reducible[K, V]
+
+case class KeyValTraversable[K, V](kvs: TraversableOnce[KeyVal[K, V]]) extends Reducible[K, V]
 
 case class MultipleFileReaders(filename: String)
 
-case class SplitFile(filename: String, nChunks: Int, chunkMaxSize: Option[Int]=None)
+case class SplitFile(filename: String, nChunks: Int, chunkMaxSize: Option[Int] = None)
 
-trait Decimable
-
-case class ProgressReport(n: Int) extends Decimable
+case class ProgressReport(n: Int)
 
 case object GetAggregator
 
 case class ReducerResult[K: ClassTag, V: ClassTag](aggregator: Map[K, V])
 
-case object EndOfData extends Decimable
+case object EndOfData
