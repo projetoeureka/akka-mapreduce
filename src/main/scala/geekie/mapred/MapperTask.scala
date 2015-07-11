@@ -30,7 +30,8 @@ class MapperTask[A: ClassTag, B](output: ActorRef, f: A => TraversableOnce[B], l
     case FileChunk(chunk: FileChunkLineReader, n, limit) =>
       try {
         val dataItr = if (limit.isDefined) chunk.iterator.take(limit.get) else chunk.iterator
-        dataItr flatMap f.asInstanceOf[String => TraversableOnce[B]] foreach (output ! _)
+        if (lazyMap) output ! (dataItr.toList flatMap f.asInstanceOf[String => TraversableOnce[B]])
+        else dataItr flatMap f.asInstanceOf[String => TraversableOnce[B]] foreach (output ! _)
         output ! ProgressReport(n)
       } finally {
         chunk.close()
