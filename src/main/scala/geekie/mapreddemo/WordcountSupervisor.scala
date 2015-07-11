@@ -4,6 +4,7 @@ import akka.actor._
 import geekie.mapred.MapperTask.LazyMap
 import geekie.mapred.PipelineHelpers._
 import geekie.mapred._
+import geekie.mapred.utils.Counter
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -16,13 +17,11 @@ import scala.io.Source
  */
 class WordcountSupervisor extends Actor {
 
-  import geekie.mapred.CounterHelpers._
-
   println("RUNNING NEAT M/R")
 
   type A = String
   type RedK = String
-  type RedV = Int
+  type RedV = Long
 
   val stopWords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
@@ -46,7 +45,7 @@ class WordcountSupervisor extends Actor {
 
   val mapper = myWorkers.head
 
-  var finalAggregate: Map[RedK, RedV] = Map()
+  var finalAggregate = Counter(Map[RedK, RedV](), (a: RedV, b: RedV) => a + b)
 
   val filename = System.getProperty("filename")
 
@@ -58,11 +57,11 @@ class WordcountSupervisor extends Actor {
     case msg: ProgressReport =>
       dataSource forward msg
     case ReducerResult(agAny) =>
-      finalAggregate = finalAggregate + agAny.asInstanceOf[Map[RedK, RedV]]
+      finalAggregate = finalAggregate addFromMap agAny.asInstanceOf[Map[RedK, RedV]]
     case EndOfData =>
-      PrintWordcountResults(finalAggregate)
+      PrintWordcountResults(finalAggregate.counter)
       context.system.scheduler.scheduleOnce(2.second, self, PoisonPill)
   }
 }
 
-case class MyRow(value: String) extends AnyVal
+
