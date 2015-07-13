@@ -40,7 +40,7 @@ class WordcountSupervisor extends Actor {
       word <- ("""[.,\-\s]+""".r split ss).iterator
       lower = word.trim.toLowerCase
       if !(stopWords contains lower)
-    } yield KeyVal(lower, 1)
+    } yield KeyVal(lower, 1L)
   } lazymap true times nMappers reduce (_ + _) times nReducers output self
 
   val mapper = myWorkers.head
