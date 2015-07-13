@@ -1,4 +1,4 @@
-package geekie.mapred
+package geekie.mapreddemo
 
 object PrintWordcountResults {
   def apply[RedK, RedV](ag: Map[RedK, RedV])(implicit ev: Numeric[RedV]) = {

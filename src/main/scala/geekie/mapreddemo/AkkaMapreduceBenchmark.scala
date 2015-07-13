@@ -1,3 +1,4 @@
+/*
 package geekie.mapreddemo
 
 import akka.actor._
@@ -60,3 +61,4 @@ class AkkaMapreduceBenchmark extends Actor {
       println(f"TOTAL TIME: $totalTime%.2fs")
   }
 }
+*/

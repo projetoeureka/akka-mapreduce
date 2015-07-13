@@ -1,4 +1,4 @@
-package geekie.mapred
+package geekie.mapreddemo
 
 import scala.io.Source
 
