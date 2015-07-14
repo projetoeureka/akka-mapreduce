@@ -23,6 +23,8 @@ class WordcountSupervisor extends Actor {
   // read lines from a log file
   val logFile = new File("/home/nic/machado.txt")
 
+  val nWorkers = 4
+
   val stopWords = scala.io.Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
   import akka.stream.io.Implicits._
@@ -36,13 +38,15 @@ class WordcountSupervisor extends Actor {
   }
 
   def mapp(s: String) = Some(KeyVal(s, 1))
-  def redd(a: Int, b: Int) = a + b
+  def redd(a: Int, b: Int): Int = a + b
+
+  val mapredProps = Mapred.props(nWorkers)(mapp)(redd)
 
   val res = Source.synchronousFile(logFile)
     .via(Framing.delimiter(ByteString(System.lineSeparator), maximumFrameLength = 8192, allowTruncation = true))
     .map(_.utf8String)
-    .mapConcat(ss => getWords(ss).toVector)
-    .to(Sink.actorSubscriber(Props(classOf[Mapred[String, String, Int]], 4, mapp _, redd _))).run()
+    .map(ss => getWords(ss).toVector)
+    .to(Sink.actorSubscriber(mapredProps)).run()
 
   res onSuccess { case _ => println("akkabou") }
 

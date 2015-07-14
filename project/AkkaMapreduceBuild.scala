@@ -4,7 +4,8 @@ import Keys._
 object AkkaMapreduceBuild extends Build {
 
   val dependencies = {
-    val akkaV       = "2.3.11"
+    val akkaV       = "2.3.12"
+    // val akkaV       = "2.4-M4"
     val akkaStreamV = "1.0-RC4"
     val scalaTestV  = "2.2.1"
     Seq(
