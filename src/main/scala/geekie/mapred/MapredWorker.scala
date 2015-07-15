@@ -1,19 +1,18 @@
 package geekie.mapred
 
-import akka.actor.{PoisonPill, Props, Actor, ActorRef}
+import akka.actor.{Actor, ActorRef, Props}
 import akka.routing.{ActorRefRoutee, RemoveRoutee}
 import geekie.mapred.MapredWorker._
 
+import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-import scala.concurrent.duration._
-
 class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[KeyVal[K, V]],
-                                                          rf: (V, V) => V) extends Actor {
+                                                          rf: (V, V) => V,
+                                                          ff: Map[K, V] => Unit) extends Actor {
 
   var acc = Map.empty[K, V]
-  val ACC_SPLIT_FACTOR = 10
 
   def aggregateNewData(kvs: TraversableOnce[KeyVal[K, V]]) = kvs foreach {
     case KeyVal(k, v) =>
@@ -28,24 +27,23 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
 
     case KeyValChunk(kvs, req) =>
       aggregateNewData(kvs.asInstanceOf[TraversableOnce[KeyVal[K, V]]])
-      req ! ChunkAck
+      req ! KeyValChunkAck
 
-    case MultiplyAndSurrender(n, requester) if n > 1 =>
+    case MultiplyAndSurrender(n, requester) if n > 0 =>
       acc.toIterator
         .map({ case (k, v) => KeyVal(k, v) })
-        .grouped(math.max(1, (acc.size + n - 2) / (n - 1))).toIterator
+        .grouped(math.max(1, (acc.size + n - 1) / n)).toIterator
         .foreach(kvs => context.parent ! KeyValChunk(kvs, requester))
-      context.parent ! MultiplyAndSurrender(n - 1, requester)
       context.parent ! RemoveRoutee(ActorRefRoutee(self))
       context become surrender
 
-    case MultiplyAndSurrender(n, requester) if n <= 1 =>
+    case MultiplyAndSurrender(n, requester) if n <= 0 =>
       requester ! ResultData(acc)
       context.parent ! RemoveRoutee(ActorRefRoutee(self))
       context become surrender
   }
 
-  def surrender :Receive = {
+  def surrender: Receive = {
     case x =>
       import context.dispatcher
       context.system.scheduler.scheduleOnce(100 millis, context.parent, x)
@@ -53,6 +51,7 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
 }
 
 object MapredWorker {
+
   case class KeyVal[K, V](key: K, value: V)
 
   case class DataChunk[A](chunk: TraversableOnce[A], requester: ActorRef)
@@ -61,11 +60,14 @@ object MapredWorker {
 
   case object ChunkAck
 
-  case class MultiplyAndSurrender(workers: Int, requester: ActorRef)
+  case object KeyValChunkAck
+
+  case class MultiplyAndSurrender(step: Int, requester: ActorRef)
 
   case class ResultData[K, V](data: Map[K, V])
 
-  def props[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[KeyVal[K, V]], rf: (V, V) => V) =
-    Props(new MapredWorker(mf, rf))
+  def props[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[KeyVal[K, V]],
+                                                   rf: (V, V) => V,
+                                                   ff: Map[K, V] => Unit) =
+    Props(new MapredWorker(mf, rf, ff))
 }
-

@@ -10,54 +10,43 @@ import akka.util.ByteString
 import geekie.mapred.Mapred
 import geekie.mapred.MapredWorker.KeyVal
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
 class WordcountSupervisor extends Actor {
 
   println("RUNNING NEAT M/R")
 
-  // actor system and implicit materializer
   implicit val system = context.system
   implicit val materializer = ActorMaterializer()
 
-  // read lines from a log file
-  val logFile = new File("/home/nic/machado.txt")
+  import akka.stream.io.Implicits._
 
-  val nWorkers = 4
+  def propertyOrDefault(propertyName: String, default: Int) = sys.props.get(propertyName) map (_.toInt) getOrElse default
+
+  val nWorkers = propertyOrDefault("workers", 4)
+  val chunkSize = propertyOrDefault("chunk-size", 5000)
+
+  val filename = sys.props("filename")
+  val file = new File(filename)
 
   val stopWords = scala.io.Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
-  import akka.stream.io.Implicits._
+  def mapFun(line: ByteString) = for {
+    word <- ("""[^\p{L}\p{Mc}]+""".r split line.utf8String).iterator
+    lower = word.trim.toLowerCase
+    if !(stopWords contains lower)
+  } yield KeyVal(lower, 1)
 
-  def getWords(ss: String) = {
-    for {
-      word <- ("""[.,\-\s]+""".r split ss).iterator
-      lower = word.trim.toLowerCase
-      if !(stopWords contains lower)
-    } yield lower
+  val mapredProps = Mapred.props(nWorkers)(mapFun)(_ + _) { counters =>
+    PrintWordcountResults.apply(counters)
+    self ! PoisonPill
   }
 
-  def mapp(s: String) = Some(KeyVal(s, 1))
-  def redd(a: Int, b: Int): Int = a + b
-
-  val mapredProps = Mapred.props(nWorkers)(mapp)(redd)
-
-  val res = Source.synchronousFile(logFile)
-    .via(Framing.delimiter(ByteString(System.lineSeparator), maximumFrameLength = 8192, allowTruncation = true))
-    .map(_.utf8String)
-    .map(ss => getWords(ss).toVector)
-    .to(Sink.actorSubscriber(mapredProps)).run()
-
-  res onSuccess { case _ => println("akkabou") }
+  Source.synchronousFile(file)
+    .via(Framing.delimiter(ByteString(System.lineSeparator), maximumFrameLength = 2048, allowTruncation = true))
+    .grouped(chunkSize)
+    .to(Sink.actorSubscriber(mapredProps))
+    .run()
 
   def receive = {
-    case AkkaStreamTest.Hammerdown =>
-      println("END THIS")
-      context.system.shutdown()
+    case _ =>
   }
 }
-
-object AkkaStreamTest {
-  case object Hammerdown
-}
-
