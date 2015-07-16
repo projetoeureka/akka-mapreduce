@@ -8,7 +8,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[KeyVal[K, V]],
+class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[MapredWorker.KeyVal[K, V]],
                                                           rf: (V, V) => V,
                                                           ff: Map[K, V] => Unit) extends Actor {
 

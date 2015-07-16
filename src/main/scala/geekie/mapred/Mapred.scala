@@ -20,7 +20,7 @@ import scala.reflect.ClassTag
   * @tparam V values that will be reduced. Usually a monoid.
   */
 class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
-                                                    mf: A => TraversableOnce[KeyVal[K, V]],
+                                                    mf: A => TraversableOnce[MapredWorker.KeyVal[K, V]],
                                                     rf: (V, V) => V,
                                                     ff: Map[K, V] => Unit) extends ActorSubscriber with ActorLogging {
 
@@ -76,7 +76,7 @@ class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
 
 object Mapred {
   def props[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int)
-                                                  (mf: A => TraversableOnce[KeyVal[K, V]])
+                                                  (mf: A => TraversableOnce[MapredWorker.KeyVal[K, V]])
                                                   (rf: (V, V) => V)
                                                   (ff: Map[K, V] => Unit)
                                                   (implicit context: akka.actor.ActorContext) =
