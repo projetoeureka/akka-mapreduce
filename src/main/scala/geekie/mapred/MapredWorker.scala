@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorRef, Props}
 import akka.routing.{ActorRefRoutee, RemoveRoutee}
 import geekie.mapred.MapredWorker._
 
+import scala.collection.TraversableLike
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
@@ -19,6 +20,14 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
       acc += (k -> (if (acc contains k) rf(acc(k), v) else v))
   }
 
+  implicit class TraversableChunkenizer[X](input: Traversable[X]) {
+    def chunkenize(chunks: Int): Stream[Traversable[X]] =
+      if (chunks > 1) {
+        val (aa, bb) = input splitAt (acc.size / chunks)
+        aa #:: bb.chunkenize(chunks - 1)
+      } else Stream(input)
+  }
+
   def receive = {
     case DataChunk(xs, req) =>
       val kvs = xs.asInstanceOf[TraversableOnce[A]] flatMap mf
@@ -30,9 +39,9 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
       req ! KeyValChunkAck
 
     case MultiplyAndSurrender(n, requester) if n > 0 =>
-      acc.toIterator
+      acc
         .map({ case (k, v) => KeyVal(k, v) })
-        .grouped(math.max(1, (acc.size + n - 1) / n)).toIterator
+        .chunkenize(n)
         .foreach(kvs => context.parent ! KeyValChunk(kvs, requester))
       context.parent ! RemoveRoutee(ActorRefRoutee(self))
       context become surrender
@@ -49,6 +58,7 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
       context.system.scheduler.scheduleOnce(100 millis, context.parent, x)
   }
 }
+
 
 object MapredWorker {
 

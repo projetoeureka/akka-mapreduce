@@ -19,7 +19,8 @@ class WordcountSupervisor extends Actor {
 
   import akka.stream.io.Implicits._
 
-  def propertyOrDefault(propertyName: String, default: Int) = sys.props.get(propertyName) map (_.toInt) getOrElse default
+  def propertyOrDefault(propertyName: String, default: Int) =
+    sys.props.get(propertyName) map (_.toInt) getOrElse default
 
   val nWorkers = propertyOrDefault("workers", 4)
   val chunkSize = propertyOrDefault("chunk-size", 5000)
@@ -36,7 +37,10 @@ class WordcountSupervisor extends Actor {
   } yield KeyVal(lower, 1)
 
   val mapredProps = Mapred.props(nWorkers)(mapFun)(_ + _) { counters =>
-    PrintWordcountResults.apply(counters)
+    println("FINAL RESULTS")
+    counters.toList sortBy (-_._2) take 20 foreach {
+      case (s, i) => println(f"$s%8s:${i.toInt}%5d")
+    }
     self ! PoisonPill
   }
 
