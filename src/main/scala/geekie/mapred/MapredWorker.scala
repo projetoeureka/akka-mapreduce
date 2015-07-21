@@ -66,7 +66,8 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
   def finishing: Receive = {
     case x =>
       import context.dispatcher
-      context.system.scheduler.scheduleOnce(100 millis, context.parent, x)
+      val BACKOFF_DELAY = 100.millis
+      context.system.scheduler.scheduleOnce(BACKOFF_DELAY, context.parent, x)
   }
 }
 
