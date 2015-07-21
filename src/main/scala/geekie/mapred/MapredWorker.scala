@@ -17,7 +17,7 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
                                                           rf: (V, V) => V,
                                                           ff: Map[K, V] => Unit) extends Actor {
 
-  type DataChunk = TraversableOnce[A]
+  type Chunk = TraversableOnce[A]
   type KeyValChunk = TraversableOnce[KeyVal[K, V]]
 
   implicit class TraversableChunkenizer[X](input: Traversable[X]) {
@@ -40,13 +40,13 @@ class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOn
   override def receive = receivingData(Map.empty[K, V])
 
   def receivingData(acc: Map[K, V]): Receive = {
-    case DataChunk(xs: DataChunk, req) =>
-      val newAcc = acc agg (xs flatMap mf)
+    case DataChunk(chunk: Chunk, req) =>
+      val newAcc = acc agg (chunk flatMap mf)
       req ! ChunkAck
       context become receivingData(newAcc)
 
-    case KeyValChunk(kvsErased, req) =>
-      val newAcc = acc agg kvsErased.asInstanceOf[KeyValChunk]
+    case KeyValChunk(kvChunkErased, req) =>
+      val newAcc = acc agg kvChunkErased.asInstanceOf[KeyValChunk]
       context become receivingData(newAcc)
       req ! KeyValChunkAck
 
@@ -84,7 +84,7 @@ object MapredWorker {
 
   case object KeyValChunkAck
 
-  case class FinishWorkers(step: Int, requester: ActorRef)
+  case class FinishWorkers(workersLeft: Int, requester: ActorRef)
 
   case class ResultData[K, V](data: Map[K, V])
 
