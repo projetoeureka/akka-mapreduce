@@ -92,5 +92,3 @@ object MapredWorker {
                                                    ff: Map[K, V] => Unit) =
     Props(new MapredWorker(mf, rf, ff))
 }
-
-//
