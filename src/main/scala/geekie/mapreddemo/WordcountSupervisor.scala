@@ -50,7 +50,7 @@ class WordcountSupervisor extends Actor {
     .to(Sink.actorSubscriber(mapredProps))
     .run()
 
-  def receive = {
+  override def receive = {
     case _ =>
   }
 }

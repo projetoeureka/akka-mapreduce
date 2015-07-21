@@ -5,13 +5,11 @@ object AkkaMapreduceBuild extends Build {
 
   val dependencies = {
     val akkaV       = "2.3.12"
-    // val akkaV       = "2.4-M4"
-    val akkaStreamV = "1.0-RC4"
+    val akkaStreamV = "1.0"
     val scalaTestV  = "2.2.1"
     Seq(
       "com.typesafe.akka" %% "akka-actor" % akkaV,
-      "com.typesafe.akka" %% "akka-stream-experimental" % akkaStreamV,
-      "org.json4s" %% "json4s-native" % "3.2.11"
+      "com.typesafe.akka" %% "akka-stream-experimental" % akkaStreamV
     )
   }
 

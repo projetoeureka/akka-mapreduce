@@ -36,17 +36,17 @@ class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
 
   val mapredRouter = context.actorOf(workerProps, "mapred-router")
 
-  def receive = {
-    case OnNext(cc: TraversableOnce[A]) =>
+  override def receive = {
+    case OnNext(chunk: TraversableOnce[A]) =>
       queue += 1
-      mapredRouter ! DataChunk(cc, self)
+      mapredRouter ! DataChunk(chunk, self)
 
     case OnError(err: Exception) =>
       log.error(err.toString)
 
     case OnComplete =>
-      log.info("FINISHING")
-      mapredRouter ! MultiplyAndSurrender(nWorkers - 1, self)
+      log.info("INPUT CONSUMED - FINISHING PROCESSING")
+      mapredRouter ! FinishWorkers(nWorkers - 1, self)
       context.become(reduceReducers(nWorkers - 1))
 
     case ChunkAck =>
@@ -65,7 +65,7 @@ class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
       if (acked + 1 < toAck)
         context.become(reduceReducers(toAck, acked + 1))
       else {
-        mapredRouter ! MultiplyAndSurrender(toAck - 1, self)
+        mapredRouter ! FinishWorkers(toAck - 1, self)
         context.become(reduceReducers(toAck - 1))
       }
 

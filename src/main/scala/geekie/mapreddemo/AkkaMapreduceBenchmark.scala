@@ -18,6 +18,7 @@ class AkkaMapreduceBenchmark extends Actor {
 
   val nWorkers = propertyOrDefault("workers", 4)
   val chunkSize = propertyOrDefault("chunks.size.max", 100)
+
   val nKeys = propertyOrDefault("app.keys", 10)
   val nTasks = propertyOrDefault("app.tasks", 10000)
   val taskSize = propertyOrDefault("app.tasks.size", 10000)
@@ -34,7 +35,7 @@ class AkkaMapreduceBenchmark extends Actor {
     .to(Sink.actorSubscriber(mapredProps))
     .run()
 
-  def receive = {
+  override def receive = {
     case _ =>
   }
 }

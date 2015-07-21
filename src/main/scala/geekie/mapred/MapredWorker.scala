@@ -9,50 +9,61 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
+object CounterHelpers {
+
+}
+
 class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[MapredWorker.KeyVal[K, V]],
                                                           rf: (V, V) => V,
                                                           ff: Map[K, V] => Unit) extends Actor {
 
-  var acc = Map.empty[K, V]
-
-  def aggregateNewData(kvs: TraversableOnce[KeyVal[K, V]]) = kvs foreach {
-    case KeyVal(k, v) =>
-      acc += (k -> (if (acc contains k) rf(acc(k), v) else v))
-  }
+  type DataChunk = TraversableOnce[A]
+  type KeyValChunk = TraversableOnce[KeyVal[K, V]]
 
   implicit class TraversableChunkenizer[X](input: Traversable[X]) {
+    /** Split a container into a given number of chunks, with empty chunks if necessary */
     def chunkenize(chunks: Int): Stream[Traversable[X]] =
       if (chunks > 1) {
-        val (aa, bb) = input splitAt (acc.size / chunks)
+        val (aa, bb) = input splitAt (input.size / chunks)
         aa #:: bb.chunkenize(chunks - 1)
       } else Stream(input)
   }
 
-  def receive = {
-    case DataChunk(xs, req) =>
-      val kvs = xs.asInstanceOf[TraversableOnce[A]] flatMap mf
-      aggregateNewData(kvs)
-      req ! ChunkAck
+  implicit class CounterAggregator(input: Map[K, V]) {
+    /** Aggregates a list of key-value pairs into the total reducer accumulator */
+    def agg(kvs: KeyValChunk): Map[K, V] =
+      (input /: kvs) { case (acc, KeyVal(k, v)) =>
+        acc + (k -> (if (acc contains k) rf(acc(k), v) else v))
+      }
+  }
 
-    case KeyValChunk(kvs, req) =>
-      aggregateNewData(kvs.asInstanceOf[TraversableOnce[KeyVal[K, V]]])
+  override def receive = receivingData(Map.empty[K, V])
+
+  def receivingData(acc: Map[K, V]): Receive = {
+    case DataChunk(xs: DataChunk, req) =>
+      val newAcc = acc agg (xs flatMap mf)
+      req ! ChunkAck
+      context become receivingData(newAcc)
+
+    case KeyValChunk(kvsErased, req) =>
+      val newAcc = acc agg kvsErased.asInstanceOf[KeyValChunk]
+      context become receivingData(newAcc)
       req ! KeyValChunkAck
 
-    case MultiplyAndSurrender(n, requester) if n > 0 =>
-      acc
-        .map({ case (k, v) => KeyVal(k, v) })
+    case FinishWorkers(n, requester) if n > 0 =>
+      acc.map({ case (k, v) => KeyVal(k, v) })
         .chunkenize(n)
         .foreach(kvs => context.parent ! KeyValChunk(kvs, requester))
       context.parent ! RemoveRoutee(ActorRefRoutee(self))
-      context become surrender
+      context become finishing
 
-    case MultiplyAndSurrender(n, requester) if n <= 0 =>
+    case FinishWorkers(0, requester) =>
       requester ! ResultData(acc)
       context.parent ! RemoveRoutee(ActorRefRoutee(self))
-      context become surrender
+      context become finishing
   }
 
-  def surrender: Receive = {
+  def finishing: Receive = {
     case x =>
       import context.dispatcher
       context.system.scheduler.scheduleOnce(100 millis, context.parent, x)
@@ -72,7 +83,7 @@ object MapredWorker {
 
   case object KeyValChunkAck
 
-  case class MultiplyAndSurrender(step: Int, requester: ActorRef)
+  case class FinishWorkers(step: Int, requester: ActorRef)
 
   case class ResultData[K, V](data: Map[K, V])
 
@@ -81,3 +92,5 @@ object MapredWorker {
                                                    ff: Map[K, V] => Unit) =
     Props(new MapredWorker(mf, rf, ff))
 }
+
+//
