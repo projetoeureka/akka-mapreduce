@@ -23,9 +23,9 @@ class WordcountSupervisor extends Actor {
     sys.props.get(propertyName) map (_.toInt) getOrElse default
 
   val nWorkers = propertyOrDefault("workers", 4)
-  val chunkSize = propertyOrDefault("chunk-size", 5000)
+  val chunkSize = propertyOrDefault("chunk.size.max", 5000)
 
-  val filename = sys.props("filename")
+  val filename = sys.props("app.filename")
   val file = new File(filename)
 
   val stopWords = scala.io.Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet

@@ -17,7 +17,7 @@ class AkkaMapreduceBenchmark extends Actor {
     sys.props.get(propertyName) map (_.toInt) getOrElse default
 
   val nWorkers = propertyOrDefault("workers", 4)
-  val chunkSize = propertyOrDefault("chunks.size.max", 100)
+  val chunkSize = propertyOrDefault("chunk.size.max", 100)
 
   val nKeys = propertyOrDefault("app.keys", 10)
   val nTasks = propertyOrDefault("app.tasks", 10000)
