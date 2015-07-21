@@ -1,67 +1,56 @@
 package geekie.mapreddemo
 
+import java.io.File
+
 import akka.actor._
-import geekie.mapred.MapperTask.LazyMap
-import geekie.mapred.PipelineHelpers._
-import geekie.mapred._
-import geekie.mapred.utils.Counter
+import akka.stream.ActorMaterializer
+import akka.stream.io.Framing
+import akka.stream.scaladsl.{Sink, Source}
+import akka.util.ByteString
+import geekie.mapred.Mapred
+import geekie.mapred.MapredWorker.KeyVal
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-import scala.io.Source
-
-/**
- * Created by nlw on 05/04/15.
- * Akka based map-reduce task example with neat job flow control.
- *
- */
 class WordcountSupervisor extends Actor {
 
   println("RUNNING NEAT M/R")
 
-  type A = String
-  type RedK = String
-  type RedV = Long
+  implicit val system = context.system
+  implicit val materializer = ActorMaterializer()
 
-  val stopWords = Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
+  import akka.stream.io.Implicits._
 
-  def propertyOrDefault(propertyName: String, default: Int) = sys.props.get(propertyName) map (_.toInt) getOrElse default
+  def propertyOrDefault(propertyName: String, default: Int) =
+    sys.props.get(propertyName) map (_.toInt) getOrElse default
 
-  val nMappers = propertyOrDefault("mappers", 4)
-  val nReducers = propertyOrDefault("reducers", 4)
-  val nChunks = propertyOrDefault("chunks", nMappers * 4)
-  val chunkWindow = propertyOrDefault("reducers", nMappers * 2)
-  val chunkSizeMax = sys.props.get("chunk.size.max") map (_.toInt)
+  val nWorkers = propertyOrDefault("workers", 4)
+  val chunkSize = propertyOrDefault("chunk-size", 5000)
 
-  val myWorkers = PipelineStart[String] map { ss =>
-    Some(ss)
-  } times nMappers map { ss: String =>
-    for {
-      word <- ("""[.,\-\s]+""".r split ss).iterator
-      lower = word.trim.toLowerCase
-      if !(stopWords contains lower)
-    } yield KeyVal(lower, 1L)
-  } lazymap true times nMappers reduce (_ + _) times nReducers output self
+  val filename = sys.props("filename")
+  val file = new File(filename)
 
-  val mapper = myWorkers.head
+  val stopWords = scala.io.Source.fromFile("src/main/resources/pt_stopwords.txt").getLines().map(_.trim).toSet
 
-  var finalAggregate = Counter(Map[RedK, RedV](), (a: RedV, b: RedV) => a + b)
+  def mapFun(line: ByteString) = for {
+    word <- ("""[^\p{L}\p{Mc}]+""".r split line.utf8String).iterator
+    lower = word.trim.toLowerCase
+    if !(stopWords contains lower)
+  } yield KeyVal(lower, 1)
 
-  val filename = System.getProperty("filename")
+  val mapredProps = Mapred.props(nWorkers)(mapFun)(_ + _) { counters =>
+    println("FINAL RESULTS")
+    counters.toList sortBy (-_._2) take 20 foreach {
+      case (s, i) => println(f"$s%8s:${i.toInt}%5d")
+    }
+    self ! PoisonPill
+  }
 
-  val dataSource = context.actorOf(Props(classOf[FileChunkSource], mapper, filename, nChunks, chunkWindow, chunkSizeMax), "wc-super")
+  Source.synchronousFile(file)
+    .via(Framing.delimiter(ByteString(System.lineSeparator), maximumFrameLength = 2048, allowTruncation = true))
+    .grouped(chunkSize)
+    .to(Sink.actorSubscriber(mapredProps))
+    .run()
 
-  def receive = working(dataSource)
-
-  def working(dataSource: ActorRef): Receive = {
-    case msg: ProgressReport =>
-      dataSource forward msg
-    case ReducerResult(agAny) =>
-      finalAggregate = finalAggregate addFromMap agAny.asInstanceOf[Map[RedK, RedV]]
-    case EndOfData =>
-      PrintWordcountResults(finalAggregate.counter)
-      context.system.scheduler.scheduleOnce(2.second, self, PoisonPill)
+  override def receive = {
+    case _ =>
   }
 }
-
-
