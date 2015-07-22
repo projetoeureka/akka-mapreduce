@@ -42,7 +42,8 @@ class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
       mapredRouter ! DataChunk(chunk, self)
 
     case OnError(err: Exception) =>
-      log.error(err.toString)
+      log.error(err.toString, "Error during processing")
+      context stop self
 
     case OnComplete =>
       log.info("INPUT CONSUMED - FINISHING PROCESSING")
@@ -70,7 +71,9 @@ class Mapred[A: ClassTag, K: ClassTag, V: ClassTag](nWorkers: Int,
       }
 
     case ResultData(acc) =>
+      log.info("REDUCER AGGREGATION COMPLETED")
       ff(acc.asInstanceOf[Map[K, V]])
+      context stop self
   }
 }
 
