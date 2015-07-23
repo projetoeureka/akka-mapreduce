@@ -4,14 +4,10 @@ import akka.actor.{Actor, ActorRef, Props}
 import akka.routing.{ActorRefRoutee, RemoveRoutee}
 import geekie.mapred.MapredWorker._
 
-import scala.collection.TraversableLike
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.reflect.ClassTag
 
-object CounterHelpers {
-
-}
 
 class MapredWorker[A: ClassTag, K: ClassTag, V: ClassTag](mf: A => TraversableOnce[MapredWorker.KeyVal[K, V]],
                                                           rf: (V, V) => V,

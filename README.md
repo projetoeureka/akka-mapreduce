@@ -1,21 +1,66 @@
 # akka-mapreduce
 
-`akka-mapreduce` is a Scala and Akka based library to run map-reduce jobs with all "map" and "reduce" tasks running in parallel, using Akka actors in Scala. There are a couple of Akka map-reduce examples out there, but few of them take good care to signal when the job is done, with all data being properly processed. Most oversimple approaches to map-reduce don't make sure every single bit of data has been accounted for, and some also discard input records with improper splitting of the input. This kind of problem is nonexistent if you are using Hadoop Streaming, for instance. Our framework provides the tools you need to create simple map-reduce applications that are free from these basic problems.
+`akka-mapreduce` is a Scala and Akka based library to run map-reduce jobs with all "map" and "reduce" tasks running in parallel, using Akka actors in Scala. In our framework data is initially read using Akka Stream, and what we do is to provide an [ActorSubscriber](http://doc.akka.io/docs/akka-stream-and-http-experimental/1.0/scala/stream-integrations.html) that can be used as a sink to the stream, processing data chunks in parallel, and aggregating the results from the multiple reducers when the stream finishes.
 
-This project should be useful for map-reduce jobs that are big enough to make parallel processing desirable, but not as big as to require a bad-ass cluster with 100s of machines. Our wiki has [a section discussing different problem scenarios](https://github.com/projetoeureka/akka-mapreduce/wiki/MapReduce-Problem-Scenarios). We believe there are some cases our framework offers a better alternative than either Hadoop Streaming or than Scala parallel collections, for instance.
+Our wiki has [a section discussing different scenarios](https://github.com/projetoeureka/akka-mapreduce/wiki/MapReduce-Problem-Scenarios) of map-reduce data processing problems. We believe there are some specific cases our framework offers a better alternative than either Hadoop Streaming or than Scala parallel collections, for instance. Our project is aimed at cases where you can have just a monolithic application running in a single multi-core machine, and with the output data able to fit the available RAM memory. Processing happens completely in-memory, unlike how Hadoop Streaming works. Spark is able to run analises in-memory too, but we think using our `Mapreduce` actor along with Akka Stream could be more practical in some cases.
 
-This project includes the library, and also a word-count example to illustrate how to use the framework. If you are interested in trying out you should probably just start by making modifications to that code.
+## How to run
 
-#### The akka-mapreduce pipeline
-The processing in `akka-mapreduce` happens in a pipeline, with components connected in series and with little supervision, but there are mechanisms to monitor the progress, and to ensure that all the data has been processed, and therefore the job is finished. This proper job termination tends to be one of the major issues when trying to implement a map-reduce framework in Akka.
+This project includes the library, and also a “wordcount” example to illustrate how to use the framework. If you are interested in trying out you should probably just start by making modifications to that code. But here is a quick taste of how it works. First of all you'll need to either clone this Git project or copy the source code, because I haven't learned how to put a packe in Maven yet! But here is a simple example:
 
-Figure illustrates a typical application. A job in `akka-mapreduce` begins with a supervisor actor sending the input data to a router that distributes the data to actors performing the map task. The output from the mappers eventually reach another router, which distributes it to reducer actors. The results from the reducers are then eventually transmitted back to the supervisor. The multiple independent mapper and reducer actors are responsible for paralellizing the processing, and Akka takes care of all the scheduling. You just need to choose an appropriate number of workers, and maybe take care not to overflow the message boxes by pushing in too much data.
 
-Our framework allows you to control wether you want each stage to output either separate data objects to the next stage, or iterables. Keeping the data together to be processed in batches tends to improve the processing speed a lot.
+```
+package geekie.mapreddemo
 
-![akka-mapreduce pipeline](https://raw.githubusercontent.com/wiki/projetoeureka/akka-mapreduce/images/Akka-Map-Reduce.png)
+import akka.actor.Actor
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{Sink, Source}
+import geekie.mapred._
 
-#### Job end signaling
-One of the biggest challenges in actor systems is usually to synchronize actors, and it is not different in akka-mapreduce. Because the actors work in a non-centralized way, there is no easy way for the supervisor to know if the processing had ended. The input data may have been sent to the mappers, but there may still be messages floating around if the supervisor decides to pull the results from the reducers.
+class SimpleExample extends Actor {
+  implicit val system = context.system
+  implicit val materializer = ActorMaterializer()
 
-We are still experimenting with ways to handle the signaling of when a task is done. First we had the `Decimator` actor, but it was retired, and the previous figure is outdated. Now have the mappers reporting when they finish a chunk, and the reducers, who are now living in a `BalancingPool` router, are being terminated when there is no more data. Active development is going on in this part of the framework, but it's usable.
+  val theData = "Antidisestablishmentarianism".toList
+
+  val nWorkers = 4
+  val chunkSize = theData.size / nWorkers
+
+  def mapFun(ch: Char) = Some(MapredWorker.KeyVal(ch.toLower, 1))
+
+  val mapredProps = Mapred.props(nWorkers)(mapFun)(_ + _) { counters =>
+    println(s"FINAL RESULTS\n$counters")
+    context stop self
+  }
+
+  Source(theData).grouped(chunkSize).to(Sink.actorSubscriber(mapredProps)).run()
+
+  override def receive = {
+    case _ =>
+  }
+}
+``` 
+
+This code must be run like this
+
+```
+sbt 'runMain akka.Main geekie.mapreddemo.SimpleExample'
+```
+
+The expected output is
+```
+[info] Running akka.Main geekie.mapreddemo.SimpleExample
+[INFO] [07/23/2015 00:51:05.303] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] INPUT CONSUMED - FINISHING PROCESSING
+[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 1 chunks
+[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 2 chunks
+[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 3 chunks
+[INFO] [07/23/2015 00:51:05.310] [Main-akka.actor.default-dispatcher-7] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 4 chunks
+[INFO] [07/23/2015 00:51:05.551] [Main-akka.actor.default-dispatcher-11] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] REDUCER AGGREGATION COMPLETED
+FINAL RESULTS
+Map(e -> 2, s -> 4, n -> 3, t -> 3, a -> 4, m -> 2, i -> 5, b -> 1, l -> 1, h -> 1, r -> 1, d -> 1)
+[INFO] [07/23/2015 00:51:05.558] [Main-akka.actor.default-dispatcher-7] [akka://Main/user/app-terminator] application supervisor has terminated, shutting down
+[success] Total time: 30 s, completed 23/07/2015 00:51:05
+
+```
+
+The method `Mapred.props` receives as arguments the desired number of parallel workers, the mapper function to be applied to the input data, the reducer function to be applied to values corresponding to each key, and a final function that receives the aggregated data after the stream is completed.
