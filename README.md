@@ -50,15 +50,15 @@ sbt 'runMain akka.Main geekie.mapreddemo.SimpleExample'
 The expected output is
 ```
 [info] Running akka.Main geekie.mapreddemo.SimpleExample
-[INFO] [07/23/2015 00:51:05.303] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] INPUT CONSUMED - FINISHING PROCESSING
-[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 1 chunks
-[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 2 chunks
-[INFO] [07/23/2015 00:51:05.305] [Main-akka.actor.default-dispatcher-4] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 3 chunks
-[INFO] [07/23/2015 00:51:05.310] [Main-akka.actor.default-dispatcher-7] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] DONE: 4 chunks
-[INFO] [07/23/2015 00:51:05.551] [Main-akka.actor.default-dispatcher-11] [akka://Main/user/$a/flow-1-3-actorSubscriberSink] REDUCER AGGREGATION COMPLETED
+[INFO] [07/23/2015 00:51:05.303] (...) INPUT CONSUMED - FINISHING PROCESSING
+[INFO] [07/23/2015 00:51:05.305] (...) DONE: 1 chunks
+[INFO] [07/23/2015 00:51:05.305] (...) DONE: 2 chunks
+[INFO] [07/23/2015 00:51:05.305] (...) DONE: 3 chunks
+[INFO] [07/23/2015 00:51:05.310] (...) DONE: 4 chunks
+[INFO] [07/23/2015 00:51:05.551] (...) REDUCER AGGREGATION COMPLETED
 FINAL RESULTS
 Map(e -> 2, s -> 4, n -> 3, t -> 3, a -> 4, m -> 2, i -> 5, b -> 1, l -> 1, h -> 1, r -> 1, d -> 1)
-[INFO] [07/23/2015 00:51:05.558] [Main-akka.actor.default-dispatcher-7] [akka://Main/user/app-terminator] application supervisor has terminated, shutting down
+[INFO] [07/23/2015 00:51:05.558] (...) application supervisor has terminated, shutting down
 [success] Total time: 30 s, completed 23/07/2015 00:51:05
 
 ```
