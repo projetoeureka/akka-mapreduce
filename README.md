@@ -9,7 +9,7 @@ Our wiki has [a section discussing different scenarios](https://github.com/proje
 This project includes the library, and also a “wordcount” example to illustrate how to use the framework. If you are interested in trying out you should probably just start by making modifications to that code. But here is a quick taste of how it works. First of all you'll need to either clone this Git project or copy the source code, because I haven't learned how to put a packe in Maven yet! But here is a simple example:
 
 
-```
+```scala
 package geekie.mapreddemo
 
 import akka.actor.Actor
